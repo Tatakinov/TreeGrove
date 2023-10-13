@@ -1,0 +1,37 @@
+<resources>
+    <string name="list_of_channel">チャンネル一覧</string>
+    <string name="load_more">さらに読み込む</string>
+    <string name="private_key">秘密鍵(任意)</string>
+    <string name="relay">リレー</string>
+    <string name="add_relay_server">リレーを追加する</string>
+    <string name="fetch_size_description">一度に読み込む投稿の数(10 – 100)</string>
+    <string name="display_profile_picture">プロフィール画像を表示する</string>
+    <string name="fetch_profile_picture_in_only_wifi">Wifi時のみプロフィール画像を取得する</string>
+    <string name="error_invalid_secret_key">無効な秘密鍵です</string>
+    <string name="error_no_valid_URL">有効なリレーのURLがありません</string>
+    <string name="error_invalid_string_in_fetch_size">無効な値が含まれています</string>
+    <string name="error_invalid_range_of_fetch_size">10から100の間の数にしてください</string>
+    <string name="error_channel_name_required">チャンネル名が必要です</string>
+    <string name="error_set_private_key">秘密鍵を設定してください</string>
+    <string name="error_failed_to_connect">%s への接続に失敗しました</string>
+    <string name="error_failed_to_post">%s への投稿に失敗しました</string>
+    <string name="description_move_to_top">一番上へ移動</string>
+    <string name="description_move_to_bottom">一番下へ移動</string>
+    <string name="description_move_to_post">投稿</string>
+    <string name="description_create_channel">チャンネルを作成</string>
+    <string name="description_change_profile">プロフィールの変更</string>
+    <string name="loading">読み込み中…</string>
+    <string name="invalid_image">画像が壊れています</string>
+    <string name="cancel">キャンセル</string>
+    <string name="empty_message">メッセージが空です</string>
+    <string name="confirm_title">確認</string>
+    <string name="confirm_text">%s\n\n以上の内容で投稿しますか？</string>
+    <string name="menu">メニュー</string>
+    <string name="send">送信</string>
+    <string name="generate_private_key">秘密鍵を生成する</string>
+    <string name="reply">返信</string>
+    <string name="hide">メッセージを非表示</string>
+    <string name="mute">ユーザーをミュート</string>
+    <string name="hide_title">メッセージを非表示にする</string>
+    <string name="mute_title">ユーザーをミュートする</string>
+</resources>

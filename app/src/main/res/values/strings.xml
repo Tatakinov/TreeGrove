@@ -1,0 +1,46 @@
+<resources>
+    <string name="app_name" translatable="false">TreeGrove</string>
+    <string name="nsec" translatable="false">nsec...</string>
+    <string name="relay_url" translatable="false">ws://nostr.example.com/</string>
+    <string name="list_of_channel">List of channels</string>
+    <string name="load_more">Load more…</string>
+    <string name="private_key">Private key(optional)</string>
+    <string name="relay">Relay</string>
+    <string name="add_relay_server">Add relay server</string>
+    <string name="fetch_size_description">Number of posts to fetch at once (10 – 100)</string>
+    <string name="display_profile_picture">Display profile picture</string>
+    <string name="fetch_profile_picture_in_only_wifi">Fetch profile picture in only wifi</string>
+    <string name="error_invalid_secret_key">Invalid secret key</string>
+    <string name="error_no_valid_URL">No valid URL was found</string>
+    <string name="error_invalid_string_in_fetch_size">Invalid string in fetch size</string>
+    <string name="error_invalid_range_of_fetch_size">Fetch size is invalid range</string>
+    <string name="name" translatable="false">Name</string>
+    <string name="about" translatable="false">About</string>
+    <string name="picture_url" translatable="false">Picture URL</string>
+    <string name="error_channel_name_required">Channel name is required</string>
+    <string name="error_set_private_key">Set your private key</string>
+    <string name="error_failed_to_connect">Failed to connect: %s</string>
+    <string name="error_failed_to_post">Failed to post: %s</string>
+    <string name="description_move_to_top">Move to top</string>
+    <string name="description_move_to_bottom">Move to bottom</string>
+    <string name="description_move_to_post">Post</string>
+    <string name="description_create_channel">Create channel</string>
+    <string name="description_change_profile">Change profile</string>
+    <string name="read" translatable="false">Read</string>
+    <string name="write" translatable="false">Write</string>
+    <string name="loading">Loading…</string>
+    <string name="invalid_image">Invalid image</string>
+    <string name="ok" translatable="false">OK</string>
+    <string name="cancel">Cancel</string>
+    <string name="empty_message">Empty message</string>
+    <string name="confirm_title">Confirm</string>
+    <string name="confirm_text">%s</string>
+    <string name="menu">Menu</string>
+    <string name="send">Send</string>
+    <string name="generate_private_key">Generate private key</string>
+    <string name="reply">Reply</string>
+    <string name="hide">Hide message</string>
+    <string name="mute">Mute user</string>
+    <string name="hide_title">Hide message</string>
+    <string name="mute_title">Mute user</string>
+</resources>
