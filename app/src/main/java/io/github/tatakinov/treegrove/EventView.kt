@@ -31,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -58,7 +59,7 @@ import java.util.Date
 
 @Composable
 fun EventListView(onGetPostDataList : () -> List<EventData>, onGetLazyListState : () -> LazyListState,
-                  onGetProfileData: () -> Map<String, ProfileData>,
+                  onGetProfileData: () -> Map<String, MetaData>,
                   onGetChannelId : () -> String,
                   onClickImageURL : (String) -> Unit, modifier: Modifier, onRefresh : () -> Unit,
                   onUserNotFound: (String) -> Unit, onPost : (Event) -> Unit,
@@ -207,13 +208,14 @@ fun EventListView(onGetPostDataList : () -> List<EventData>, onGetLazyListState 
 }
 
 @Composable
-fun EventView(post : Event, onGetProfileData : () -> Map<String, ProfileData>, onClickImageURL : (String) -> Unit,
+fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onClickImageURL : (String) -> Unit,
               onUserNotFound : (String) -> Unit, onReply: (Event) -> Unit, onHide : (Event) -> Unit, onMute : (Event) -> Unit) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     var name = NIP19.encode("npub", Hex.decode(post.pubkey)).take(16) + "..."
     var url = ""
     var image : ImageBitmap? = null
+    var identify = false
     val postProfileData = onGetProfileData()
     var doHideMessage by remember {
         mutableStateOf(false)
@@ -234,6 +236,9 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, ProfileData>, o
         }
         if (data.image.status == DataStatus.Valid) {
             image   = data.image.data
+        }
+        if (data.nip05.status == DataStatus.Valid) {
+            identify = data.nip05.data!!
         }
     }
     // seconds -> milliseconds
@@ -343,13 +348,16 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, ProfileData>, o
                 }
             }
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp)) {
-                Row {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         name,
                         fontSize = 12.sp,
                         overflow = TextOverflow.Ellipsis,
                         maxLines = 2
                     )
+                    if (identify) {
+                        Image(painterResource(id = R.drawable.verify), contentDescription = context.getString(R.string.verify), modifier = Modifier.height(12.dp))
+                    }
                     Spacer(modifier = Modifier.weight(1f))
                     Text(d, fontSize = 12.sp)
                 }

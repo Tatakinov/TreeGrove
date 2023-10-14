@@ -43,4 +43,7 @@
     <string name="mute">Mute user</string>
     <string name="hide_title">Hide message</string>
     <string name="mute_title">Mute user</string>
+    <string name="nip05_address">NIP05 address</string>
+    <string name="error_invalid_address">Invalid address</string>
+    <string name="verify">verify</string>
 </resources>

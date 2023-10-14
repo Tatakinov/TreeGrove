@@ -1,6 +1,7 @@
 package io.github.tatakinov.treegrove
 
 import android.graphics.BitmapFactory
+import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -198,14 +199,14 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     }
                 }
                 if (doCreateChannel) {
-                    MetaDataView(title = localContext.getString(R.string.description_create_channel),
+                    ChannelMetaDataView(title = localContext.getString(R.string.description_create_channel),
                         name = "", about = "", picture = "", modifier = Modifier.align(Alignment.TopCenter),
                         onSubmit = { name, about, picture ->
                             scope.launch(Dispatchers.Default) {
                                 val json = JSONObject()
-                                json.put(ProfileData.NAME, name)
-                                json.put(ProfileData.ABOUT, about)
-                                json.put(ProfileData.PICTURE, picture)
+                                json.put(MetaData.NAME, name)
+                                json.put(MetaData.ABOUT, about)
+                                json.put(MetaData.PICTURE, picture)
                                 val event = Event(
                                     Kind.ChannelCreation.num,
                                     json.toString(),
@@ -226,21 +227,24 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     var name = ""
                     var about = ""
                     var picture = ""
+                    var nip05 = ""
                     if (postProfileData.value!!.contains(Config.config.getPublicKey())) {
                         val data = postProfileData.value!![Config.config.getPublicKey()]!!
                         name = data.name
                         about = data.about
                         picture = data.pictureUrl
+                        nip05 = data.nip05Address
                     }
-                    MetaDataView(title = localContext.getString(R.string.description_change_profile),
-                        name = name, about = about, picture = picture,
+                    ProfileMetaDataView(title = localContext.getString(R.string.description_change_profile),
+                        name = name, about = about, picture = picture, nip05 = nip05,
                         modifier = Modifier.align(Alignment.TopCenter),
-                        onSubmit = { name, about, picture ->
+                        onSubmit = { name, about, picture, nip05 ->
                             scope.launch(Dispatchers.Default) {
                                 val json = JSONObject()
-                                json.put(ProfileData.NAME, name)
-                                json.put(ProfileData.ABOUT, about)
-                                json.put(ProfileData.PICTURE, picture)
+                                json.put(MetaData.NAME, name)
+                                json.put(MetaData.ABOUT, about)
+                                json.put(MetaData.PICTURE, picture)
+                                json.put(MetaData.NIP05, nip05)
                                 val event = Event(
                                     Kind.Metadata.num,
                                     json.toString(),

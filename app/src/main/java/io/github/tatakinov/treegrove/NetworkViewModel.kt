@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
+import io.github.tatakinov.treegrove.nostr.NIP05
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -31,14 +32,14 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     val channelId : LiveData<String> get() = _channelId
     private val _channelList = MutableLiveData<List<EventData>>(ArrayList())
     val channelList : LiveData<List<EventData>> get() = _channelList
-    private val _channelProfileData = MutableLiveData<MutableMap<String, ProfileData>>(HashMap())
-    val channelProfileData : LiveData<MutableMap<String, ProfileData>> get() = _channelProfileData
+    private val _channelMetaData = MutableLiveData<MutableMap<String, MetaData>>(HashMap())
+    val channelProfileData : LiveData<MutableMap<String, MetaData>> get() = _channelMetaData
     private val _postDataListMap = mutableMapOf<String, List<EventData>>("" to listOf())
     private val _postDataList = MutableLiveData<List<EventData>>(listOf())
     val postDataList : LiveData<List<EventData>> get() = _postDataList
     private val _postProfileDataInternal = mutableMapOf<String, MutableList<String>>()
-    private val _postProfileData = MutableLiveData<MutableMap<String, ProfileData>>(mutableMapOf<String, ProfileData>())
-    val postProfileData : LiveData<MutableMap<String, ProfileData>> get() = _postProfileData
+    private val _postMetaData = MutableLiveData<MutableMap<String, MetaData>>(mutableMapOf<String, MetaData>())
+    val postProfileData : LiveData<MutableMap<String, MetaData>> get() = _postMetaData
     private val _transmittedDataSize = MutableLiveData<Int>(0)
     val transmittedDataSize : LiveData<Int> get() = _transmittedDataSize
     private val _imageDataMap = mutableMapOf<String, LoadingDataStatus<ByteArray>>()
@@ -244,22 +245,26 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             Kind.Metadata.num -> {
                 try {
                     val json = JSONObject(event.content)
-                    val name = json.optString(ProfileData.NAME, "")
-                    val about = json.optString(ProfileData.ABOUT, "")
-                    val picture = json.optString(ProfileData.PICTURE, "")
-                    val map = mutableMapOf<String, ProfileData>().apply {
-                        for ((k, v) in _postProfileData.value!!) {
+                    val name = json.optString(MetaData.NAME, "")
+                    val about = json.optString(MetaData.ABOUT, "")
+                    val picture = json.optString(MetaData.PICTURE, "")
+                    val nip05 = json.optString(MetaData.NIP05, "")
+                    val map = mutableMapOf<String, MetaData>().apply {
+                        for ((k, v) in _postMetaData.value!!) {
                             put(k, v)
                         }
                     }
                     map[event.pubkey] =
-                        ProfileData(name, about, picture)
+                        MetaData(name, about, picture, nip05Address = nip05)
                     withContext(Dispatchers.Main) {
-                        _postProfileData.value = map
+                        _postMetaData.value = map
                     }
                     // fetch image
                     if (picture.isNotEmpty() && canFetchProfileImage()) {
-                        fetchProfileImage(picture, data = _postProfileData, id = event.pubkey)
+                        fetchProfileImage(picture, data = _postMetaData, pubkey = event.pubkey)
+                    }
+                    if (nip05.isNotEmpty()) {
+                        fetchProfileIdentify(nip05, event.pubkey)
                     }
                     _postProfileDataInternal.remove(event.pubkey)
                 } catch (e: JSONException) {
@@ -269,31 +274,31 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
             Kind.ChannelCreation.num -> {
                 if (!channel.any { it.event == event }) {
-                    if (!_channelProfileData.value!!.contains(event.id)) {
+                    if (!_channelMetaData.value!!.contains(event.id)) {
                         try {
                             val json = JSONObject(event.content)
                             val name = json.optString(
-                                ProfileData.NAME,
+                                MetaData.NAME,
                                 "Invalid json object"
                             )
-                            val about = json.optString(ProfileData.ABOUT, "")
-                            val picture = json.optString(ProfileData.PICTURE, "")
-                            val map = mutableMapOf<String, ProfileData>().apply {
-                                for ((k, v) in _channelProfileData.value!!) {
+                            val about = json.optString(MetaData.ABOUT, "")
+                            val picture = json.optString(MetaData.PICTURE, "")
+                            val map = mutableMapOf<String, MetaData>().apply {
+                                for ((k, v) in _channelMetaData.value!!) {
                                     put(k, v)
                                 }
                             }
                             map[event.id]   =
-                                ProfileData(name, about, picture)
+                                MetaData(name, about, picture)
                             withContext(Dispatchers.Main) {
-                                _channelProfileData.value = map
+                                _channelMetaData.value = map
                             }
                             if (picture.isNotEmpty() && canFetchProfileImage()) {
-                                fetchProfileImage(picture, data = _channelProfileData, id = event.id)
+                                fetchProfileImage(picture, data = _channelMetaData, pubkey = event.id)
                             }
                         } catch (e: JSONException) {
-                            _channelProfileData.value!![event.id] =
-                                ProfileData("Invalid json object")
+                            _channelMetaData.value!![event.id] =
+                                MetaData("Invalid json object")
                         }
                         val filter = Filter(
                             kinds = listOf(41),
@@ -329,22 +334,22 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         }
                     }
                     val json = JSONObject(event.content)
-                    val name = json.optString(ProfileData.NAME, "")
-                    val about = json.optString(ProfileData.ABOUT, "")
-                    val picture = json.optString(ProfileData.PICTURE, "")
-                    val map = mutableMapOf<String, ProfileData>().apply {
-                        for ((k, v) in _channelProfileData.value!!) {
+                    val name = json.optString(MetaData.NAME, "")
+                    val about = json.optString(MetaData.ABOUT, "")
+                    val picture = json.optString(MetaData.PICTURE, "")
+                    val map = mutableMapOf<String, MetaData>().apply {
+                        for ((k, v) in _channelMetaData.value!!) {
                             put(k, v)
                         }
                     }
-                    map[id] = ProfileData(name, about, picture)
+                    map[id] = MetaData(name, about, picture)
 
                     withContext(Dispatchers.Main) {
-                        _channelProfileData.value = map
+                        _channelMetaData.value = map
                     }
                     if (picture.isNotEmpty() && canFetchProfileImage()) {
-                        _channelProfileData.value!![id]!!.image = _channelProfileData.value!![id]!!.image.copy(status = DataStatus.NotLoading, data = null)
-                        fetchProfileImage(picture, data = _channelProfileData, id = id)
+                        _channelMetaData.value!![id]!!.image = _channelMetaData.value!![id]!!.image.copy(status = DataStatus.NotLoading, data = null)
+                        fetchProfileImage(picture, data = _channelMetaData, pubkey = id)
                     }
                 }
                 // エラーは出さず受信したイベントを無視する
@@ -536,7 +541,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     private suspend fun fetchUserProfile(pubkey : String, relay : Relay) = withContext(Dispatchers.IO) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                if (_postProfileData.value!!.contains(pubkey)) {
+                if (_postMetaData.value!!.contains(pubkey)) {
                     return@launch
                 }
                 if (!_postProfileDataInternal.contains(pubkey)) {
@@ -561,10 +566,13 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     fun fetchUserProfile(pubkey : String) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                if (_postProfileData.value!!.contains(pubkey)) {
-                    val data = _postProfileData.value!![pubkey]!!
+                if (_postMetaData.value!!.contains(pubkey)) {
+                    val data = _postMetaData.value!![pubkey]!!
                     if (data.pictureUrl.isNotEmpty() && data.image.status == DataStatus.NotLoading && canFetchProfileImage()) {
-                        fetchProfileImage(data.pictureUrl, data = _postProfileData, id = pubkey)
+                        fetchProfileImage(data.pictureUrl, data = _postMetaData, pubkey = pubkey)
+                    }
+                    if (data.nip05Address.isNotEmpty() && data.nip05.status == DataStatus.NotLoading) {
+                        fetchProfileIdentify(data.nip05Address, pubkey = pubkey)
                     }
                     return@launch
                 }
@@ -575,7 +583,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }
 
-    private suspend fun fetch(url : String, onSuccess : (ByteArray) -> Unit, onInvalid : () -> Unit, onFailure: () -> Unit) = withContext(Dispatchers.Default) {
+    private suspend fun fetch(url : String, followRedirect : Boolean = true, onSuccess : (ByteArray) -> Unit, onInvalid : () -> Unit, onFailure: () -> Unit) = withContext(Dispatchers.Default) {
         if (!url.startsWith("http://") && !url.startsWith("https://")) {
             return@withContext
         }
@@ -588,8 +596,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
+                val client = if (followRedirect) { HttpClient.default } else { HttpClient.noRedirect }
                 val response =
-                    HttpClient.instance.newCall(request).execute()
+                    client.newCall(request).execute()
                 withContext(Dispatchers.Main) {
                     _mutex.withLock {
                         _transmittedDataSize.value =
@@ -657,36 +666,36 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             close()
             reconnect()
             if (state == NetworkState.Wifi) {
-                for ((k, v) in _channelProfileData.value!!) {
+                for ((k, v) in _channelMetaData.value!!) {
                     if (v.pictureUrl.isNotEmpty()) {
-                        fetchProfileImage(v.pictureUrl, _channelProfileData, k)
+                        fetchProfileImage(v.pictureUrl, _channelMetaData, k)
                     }
                 }
-                for ((k, v) in _postProfileData.value!!) {
+                for ((k, v) in _postMetaData.value!!) {
                     if (v.pictureUrl.isNotEmpty()) {
-                        fetchProfileImage(v.pictureUrl, _postProfileData, k)
+                        fetchProfileImage(v.pictureUrl, _postMetaData, k)
                     }
                 }
             }
         }
     }
 
-    private suspend fun fetchProfileImage(url : String, data : MutableLiveData<MutableMap<String, ProfileData>>, id : String) = withContext(Dispatchers.IO) {
+    private suspend fun fetchProfileImage(url : String, data : MutableLiveData<MutableMap<String, MetaData>>, pubkey : String) = withContext(Dispatchers.IO) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                if (data.value!![id]!!.image.status != DataStatus.NotLoading) {
+                if (data.value!![pubkey]!!.image.status != DataStatus.NotLoading) {
                     return@withLock
                 }
-                data.value!![id]!!.image = data.value!![id]!!.image.copy(status = DataStatus.Loading)
+                data.value!![pubkey]!!.image = data.value!![pubkey]!!.image.copy(status = DataStatus.Loading)
                 val refresh : (DataStatus, ImageBitmap?) -> Unit = { status, image ->
                     viewModelScope.launch(Dispatchers.Default) {
                         _mutex.withLock {
-                            val map = mutableMapOf<String, ProfileData>().apply {
+                            val map = mutableMapOf<String, MetaData>().apply {
                                 for ((k, v) in data.value!!) {
                                     put(k, v.copy())
                                 }
                             }
-                            map[id]!!.image = map[id]!!.image.copy(status = status, data = image)
+                            map[pubkey]!!.image = map[pubkey]!!.image.copy(status = status, data = image)
                             withContext(Dispatchers.Main) {
                                 data.value = map
                             }
@@ -709,6 +718,66 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                         refresh(DataStatus.Invalid, null)
                                     }
                                 } catch (e: IllegalArgumentException) {
+                                    refresh(DataStatus.Invalid, null)
+                                }
+                            }
+                        }
+                    }, onInvalid = {
+                        refresh(DataStatus.Invalid, null)
+                    }, onFailure = {
+                        refresh(DataStatus.NotLoading, null)
+                    })
+                }
+            }
+        }
+    }
+
+    private suspend fun fetchProfileIdentify(id : String, pubkey : String) = withContext(Dispatchers.IO) {
+        val match = NIP05.ADDRESS_REGEX.find(id) ?: return@withContext
+        val username = match.groups[1]!!.value
+        val domain = match.groups[2]!!.value
+        viewModelScope.launch(Dispatchers.Default) {
+            _mutex.withLock {
+                val data = _postMetaData
+                if (data.value!![pubkey]!!.nip05.status != DataStatus.NotLoading) {
+                    return@withLock
+                }
+                data.value!![pubkey]!!.nip05 = data.value!![pubkey]!!.nip05.copy(status = DataStatus.Loading)
+                val refresh : (DataStatus, Boolean?) -> Unit = { status, nip05 ->
+                    viewModelScope.launch(Dispatchers.Default) {
+                        _mutex.withLock {
+                            val map = mutableMapOf<String, MetaData>().apply {
+                                for ((k, v) in data.value!!) {
+                                    put(k, v.copy())
+                                }
+                            }
+                            map[pubkey]!!.nip05 = map[pubkey]!!.nip05.copy(status = status, data = nip05)
+                            withContext(Dispatchers.Main) {
+                                data.value = map
+                            }
+                        }
+                    }
+                }
+                viewModelScope.launch(Dispatchers.IO) {
+                    fetch("https://$domain/.well-known/nostr.json?name=$username", followRedirect = false, onSuccess = { data ->
+                        viewModelScope.launch(Dispatchers.Default) {
+                            _mutex.withLock {
+                                try {
+                                    val json = JSONObject(String(data))
+                                    val names = json.optJSONObject(NIP05.NAMES)
+                                    if (names == null) {
+                                        refresh(DataStatus.Invalid, null)
+                                    }
+                                    else {
+                                        val p = names.optString(username, "")
+                                        if (p == pubkey) {
+                                            refresh(DataStatus.Valid, true)
+                                        }
+                                        else {
+                                            refresh(DataStatus.Invalid, null)
+                                        }
+                                    }
+                                } catch (e: JSONException) {
                                     refresh(DataStatus.Invalid, null)
                                 }
                             }

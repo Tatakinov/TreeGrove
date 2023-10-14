@@ -34,4 +34,7 @@
     <string name="mute">ユーザーをミュート</string>
     <string name="hide_title">メッセージを非表示にする</string>
     <string name="mute_title">ユーザーをミュートする</string>
+    <string name="nip05_address">NIP05 アドレス</string>
+    <string name="error_invalid_address">無効なアドレスです</string>
+    <string name="verify">認証</string>
 </resources>

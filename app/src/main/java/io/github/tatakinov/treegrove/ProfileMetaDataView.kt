@@ -24,15 +24,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.dp
+import io.github.tatakinov.treegrove.nostr.NIP05
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MetaDataView(title : String, name : String, about : String, picture : String, modifier : Modifier, onSubmit : (String, String, String) -> Unit, onCancel : () -> Unit) {
+fun ProfileMetaDataView(title : String, name : String, about : String, picture : String, nip05 : String,
+                        modifier : Modifier, onSubmit : (String, String, String, String) -> Unit, onCancel : () -> Unit) {
     val context = LocalContext.current
     var name by remember { mutableStateOf(name) }
     var about by remember { mutableStateOf(about) }
     var picture by remember { mutableStateOf(picture) }
+    var nip05 by remember { mutableStateOf(nip05) }
     Box(modifier = modifier) {
         Column {
             Text(text = title, modifier = Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.background))
@@ -51,14 +53,22 @@ fun MetaDataView(title : String, name : String, about : String, picture : String
             }, label = {
                 Text(context.getString(R.string.picture_url))
             }, modifier = Modifier.fillMaxWidth(), maxLines = 1)
+            TextField(value = nip05, onValueChange = {
+                nip05 = it.replace("\n", "")
+            }, label = {
+                Text(context.getString(R.string.nip05_address))
+            }, modifier = Modifier.fillMaxWidth(), maxLines = 1)
             Row(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
                 Spacer(modifier = Modifier.weight(1f))
                 Button(onClick = {
                     if (name.isEmpty()) {
                         Toast.makeText(context, context.getString(R.string.error_channel_name_required), Toast.LENGTH_SHORT).show()
                     }
+                    else if (nip05.isNotEmpty() && !NIP05.ADDRESS_REGEX.matches(nip05)) {
+                        Toast.makeText(context, context.getString(R.string.error_invalid_address), Toast.LENGTH_SHORT).show()
+                    }
                     else {
-                        onSubmit(name, about, picture)
+                        onSubmit(name, about, picture, nip05)
                     }
                 }, content = {
                     Image(painterResource(id = R.drawable.send), contentDescription = context.getString(R.string.send), modifier = Modifier.width(Icon.size).height(Icon.size))

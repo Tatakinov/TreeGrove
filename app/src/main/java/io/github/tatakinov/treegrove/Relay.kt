@@ -33,7 +33,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
             return
         }
         val req = Request.Builder().url(_config.url).build()
-        _socket = HttpClient.instance.newWebSocket(req, object : WebSocketListener() {
+        _socket = HttpClient.default.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 _listener.onTransmit(this@Relay, response.toString().toByteArray().size)
                 _listener.onConnected(this@Relay)
