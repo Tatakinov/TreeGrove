@@ -146,9 +146,8 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     }
                                 }
                             }
-                            if (filter.until > 0 || !(filter.kinds.contains(40) || filter.kinds.contains(
-                                    42
-                                ))
+                            if (filter.until > 0 || !(filter.kinds.contains(Kind.ChannelCreation.num) ||
+                                        filter.kinds.contains(Kind.ChannelMessage.num))
                             ) {
                                 return true
                             }
@@ -214,20 +213,20 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
     private suspend fun sendInInitialize(relay : Relay) = withContext(Dispatchers.IO) {
         relay.closeAllFilter()
-        val filter = Filter(kinds = listOf(40), limit = Config.config.fetchSize)
+        val filter = Filter(kinds = listOf(Kind.ChannelCreation.num), limit = Config.config.fetchSize)
         relay.send(filter)
         val list = _postDataList.value!!.filter { it.from.contains(relay.url()) }
         if (channelId.value!!.isNotEmpty()) {
             val filter = if (list.isEmpty()) {
                 Filter(
-                    kinds = listOf(42),
+                    kinds = listOf(Kind.ChannelMessage.num),
                     limit = Config.config.fetchSize,
                     tags = mapOf("e" to listOf(channelId.value!!))
                 )
             } else {
                 val first = list.first()
                 Filter(
-                    kinds = listOf(42),
+                    kinds = listOf(Kind.ChannelMessage.num),
                     limit = Config.config.fetchSize,
                     tags = mapOf("e" to listOf(channelId.value!!)),
                     since = first.event.createdAt
@@ -281,7 +280,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             }
 
             Kind.ChannelCreation.num -> {
-                if (!channel.any { it.event == event && it.from.contains(relay.url()) }) {
+                if (channel.none { it.event == event && it.from.contains(relay.url()) }) {
                     try {
                         val json = JSONObject(event.content)
                         val name = json.optString(
@@ -312,7 +311,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                             fetchProfileImage(picture, data = _channelMetaData, pubkey = event.id)
                         }
                         val filter = Filter(
-                            kinds = listOf(41),
+                            kinds = listOf(Kind.ChannelMetadata.num),
                             tags = mapOf("e" to listOf(event.id)),
                             limit = 1
                         )
@@ -508,15 +507,17 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                             }
                         }
                     }
-                    // 今のところsinceとuntilを同時に指定することはない
-                    if (until && u > 0) {
-                        relay.send(filter.copy(kinds = listOf(kind.num), until = u))
-                    }
-                    else if (since && s > 0) {
-                        relay.send(filter.copy(kinds = listOf(kind.num), since = s))
-                    }
-                    else {
-                        relay.send(filter.copy(kinds = listOf(kind.num)))
+                    viewModelScope.launch(Dispatchers.IO) {
+                        // 今のところsinceとuntilを同時に指定することはない
+                        if (until && u > 0) {
+                            relay.send(filter.copy(kinds = listOf(kind.num), until = u))
+                        }
+                        else if (since && s > 0) {
+                            relay.send(filter.copy(kinds = listOf(kind.num), since = s))
+                        }
+                        else {
+                            relay.send(filter.copy(kinds = listOf(kind.num)))
+                        }
                     }
                 }
             }

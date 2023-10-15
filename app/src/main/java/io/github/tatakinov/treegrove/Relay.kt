@@ -4,6 +4,7 @@ import android.util.Log
 import fr.acinq.secp256k1.Hex
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
+import io.github.tatakinov.treegrove.nostr.Kind
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
@@ -40,7 +41,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d("Relay.onMessage", text)
+                Log.d("Relay.onMessage.${_config.url}", text)
                 _listener.onTransmit(this@Relay, text.toByteArray().size)
                 try {
                     val json = JSONArray(text)
@@ -71,9 +72,6 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
                         "EOSE" -> {
                             val subscriptionId = json.getString(1)
                             if (_filterQueue.contains(subscriptionId)) {
-                                reentrantLock.withLock {
-                                    _filterQueue[subscriptionId]!!.isConnected = true
-                                }
                                 val info = _filterQueue[subscriptionId]!!
                                 if (_listener.onEOSE(
                                         this@Relay,
@@ -86,12 +84,18 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
                                     }
                                     close(subscriptionId)
                                 }
+                                else {
+                                    reentrantLock.withLock {
+                                        _filterQueue[subscriptionId] = _filterQueue[subscriptionId]!!.copy(status = ConnectionStatus.Stream)
+                                    }
+                                }
                                 var key = ""
                                 var value: ConnectionInfo? = null
                                 reentrantLock.withLock {
                                     _postBuffer.remove(subscriptionId)
                                     for ((k, v) in _filterQueue) {
-                                        if (!v.isConnected) {
+                                        if (v.status == ConnectionStatus.Wait) {
+                                            _filterQueue[k] = _filterQueue[k]!!.copy(status = ConnectionStatus.Connecting)
                                             key = k
                                             value = v
                                             break
@@ -99,7 +103,6 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
                                     }
                                 }
                                 if (key.isNotEmpty() && value != null) {
-                                    value!!.isConnected = true
                                     send(value!!.filter, key)
                                 }
                             }
@@ -154,7 +157,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
 
     private fun send(message : String) {
         _listener.onTransmit(this, message.toByteArray().size)
-        Log.d("Relay.send", message)
+        Log.d("Relay.send.${_config.url}", message)
         reentrantLock.withLock {
             _socket?.send(message)
         }
@@ -183,21 +186,16 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
         } while(_filterQueue.contains(id))
         var canConnect = true
         reentrantLock.withLock {
-            for ((_, v) in _filterQueue) {
-                if (!v.isConnected) {
-                    canConnect = false
-                }
+            canConnect = _filterQueue.none { it.value.status == ConnectionStatus.Connecting }
+            _filterQueue[id] = if (canConnect) {
+                ConnectionInfo(filter, ConnectionStatus.Connecting)
+            }
+            else {
+                ConnectionInfo(filter, ConnectionStatus.Wait)
             }
         }
         if (canConnect) {
-            reentrantLock.withLock {
-                _filterQueue[id] = ConnectionInfo(filter, true)
-            }
             send(filter, id)
-        } else {
-            reentrantLock.withLock {
-                _filterQueue[id] = ConnectionInfo(filter, false)
-            }
         }
         return id
     }
@@ -225,7 +223,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
     fun close(filter : Filter) {
         reentrantLock.withLock {
             for ((k, v) in _filterQueue) {
-                if (filter == v.filter && !v.isConnected) {
+                if (filter == v.filter && v.status != ConnectionStatus.Wait) {
                     close(k)
                 }
             }
@@ -236,7 +234,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
         val list = mutableListOf<String>()
         reentrantLock.withLock {
             for ((k, v) in _filterQueue) {
-                if (v.filter.kinds.contains(42)) {
+                if (v.filter.kinds.contains(Kind.ChannelMessage.num)) {
                     list.add((k))
                 }
             }
