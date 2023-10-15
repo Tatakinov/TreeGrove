@@ -68,13 +68,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val channelProfileData = networkViewModel.channelProfileData.observeAsState()
     val postProfileData = networkViewModel.postProfileData.observeAsState()
     val localContext = LocalContext.current
-    var doConfirmPost by remember { mutableStateOf(false) }
-    var postMessage : String by remember { mutableStateOf("") }
     val transmittedDataSize = networkViewModel.transmittedDataSize.observeAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val imageURL = remember { mutableStateOf("") }
     val image = networkViewModel.image.observeAsState()
-    var replyEvent : Event? by remember { mutableStateOf(null) }
     var expandedChannelAbout by remember {
         mutableStateOf(false)
     }
