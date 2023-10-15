@@ -759,7 +759,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     }
                 }
                 viewModelScope.launch(Dispatchers.IO) {
-                    fetch("https://$domain/.well-known/nostr.json?name=$username", followRedirect = false, onSuccess = { data ->
+                    fetch(NIP05.generateIdentifyURL(domain, username), followRedirect = false, onSuccess = { data ->
                         viewModelScope.launch(Dispatchers.Default) {
                             _mutex.withLock {
                                 try {
