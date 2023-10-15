@@ -254,13 +254,21 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                             put(k, v)
                         }
                     }
-                    map[event.pubkey] =
-                        MetaData(name, about, picture, nip05Address = nip05)
+                    if (map.contains(event.pubkey)) {
+                        if (map[event.pubkey]!!.createdAt < event.createdAt) {
+                            map[event.pubkey] =
+                                MetaData(event.createdAt, name, about, picture, nip05Address = nip05)
+                        }
+                    }
+                    else {
+                        map[event.pubkey] =
+                            MetaData(event.createdAt, name, about, picture, nip05Address = nip05)
+                    }
                     withContext(Dispatchers.Main) {
                         _postMetaData.value = map
                     }
                     // fetch image
-                    if (picture.isNotEmpty() && canFetchProfileImage()) {
+                    if (picture.isNotEmpty()) {
                         fetchProfileImage(picture, data = _postMetaData, pubkey = event.pubkey)
                     }
                     if (nip05.isNotEmpty()) {
@@ -273,32 +281,35 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             }
 
             Kind.ChannelCreation.num -> {
-                if (!channel.any { it.event == event }) {
-                    if (!_channelMetaData.value!!.contains(event.id)) {
-                        try {
-                            val json = JSONObject(event.content)
-                            val name = json.optString(
-                                MetaData.NAME,
-                                "Invalid json object"
-                            )
-                            val about = json.optString(MetaData.ABOUT, "")
-                            val picture = json.optString(MetaData.PICTURE, "")
-                            val map = mutableMapOf<String, MetaData>().apply {
-                                for ((k, v) in _channelMetaData.value!!) {
-                                    put(k, v)
-                                }
+                if (!channel.any { it.event == event && it.from.contains(relay.url()) }) {
+                    try {
+                        val json = JSONObject(event.content)
+                        val name = json.optString(
+                            MetaData.NAME,
+                            "Invalid json object"
+                        )
+                        val about = json.optString(MetaData.ABOUT, "")
+                        val picture = json.optString(MetaData.PICTURE, "")
+                        val map = mutableMapOf<String, MetaData>().apply {
+                            for ((k, v) in _channelMetaData.value!!) {
+                                put(k, v)
                             }
-                            map[event.id]   =
-                                MetaData(name, about, picture)
-                            withContext(Dispatchers.Main) {
-                                _channelMetaData.value = map
+                        }
+                        if (map.contains(event.id)) {
+                            if (map[event.id]!!.createdAt < event.createdAt) {
+                                map[event.id]   =
+                                    MetaData(event.createdAt, name, about, picture)
                             }
-                            if (picture.isNotEmpty() && canFetchProfileImage()) {
-                                fetchProfileImage(picture, data = _channelMetaData, pubkey = event.id)
-                            }
-                        } catch (e: JSONException) {
-                            _channelMetaData.value!![event.id] =
-                                MetaData("Invalid json object")
+                        }
+                        else {
+                            map[event.id] =
+                                MetaData(event.createdAt, name, about, picture)
+                        }
+                        withContext(Dispatchers.Main) {
+                            _channelMetaData.value = map
+                        }
+                        if (picture.isNotEmpty()) {
+                            fetchProfileImage(picture, data = _channelMetaData, pubkey = event.id)
                         }
                         val filter = Filter(
                             kinds = listOf(41),
@@ -308,18 +319,23 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         viewModelScope.launch(Dispatchers.IO) {
                             relay.send(filter)
                         }
-                    }
-                    channel.add(EventData(from = listOf(relay.url()), event = event))
-                }
-                else {
-                    for (i in channel.indices) {
-                        if (channel[i].event == event) {
-                            channel[i] = channel[i].copy(from = mutableListOf<String>().apply {
-                                addAll(channel[i].from)
-                                add(relay.url())
-                            })
-                            break
+                        if (channel.any {it.event == event}) {
+                            for (i in channel.indices) {
+                                if (channel[i].event == event) {
+                                    channel[i] = channel[i].copy(from = mutableListOf<String>().apply {
+                                        addAll(channel[i].from)
+                                        add(relay.url())
+                                    })
+                                    break
+                                }
+                            }
                         }
+                        else {
+                            channel.add(EventData(from = listOf(relay.url()), event = event))
+                        }
+                    }
+                    // エラーは出さず受信したイベントを無視する
+                    catch (_: JSONException) {
                     }
                 }
             }
@@ -328,7 +344,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 try {
                     var id = ""
                     for (tag in event.tags) {
-                        if (tag[0] == "e") {
+                        if (tag.size >= 2 && tag[0] == "e") {
                             id = tag[1]
                             break
                         }
@@ -342,19 +358,24 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                             put(k, v)
                         }
                     }
-                    map[id] = MetaData(name, about, picture)
+                    if (map.contains(id)) {
+                        if (map[id]!!.createdAt < event.createdAt) {
+                            map[id] = MetaData(event.createdAt, name, about, picture)
+                        }
+                    }
+                    else {
+                        map[id] = MetaData(event.createdAt, name, about, picture)
+                    }
 
                     withContext(Dispatchers.Main) {
                         _channelMetaData.value = map
                     }
-                    if (picture.isNotEmpty() && canFetchProfileImage()) {
+                    if (picture.isNotEmpty()) {
                         _channelMetaData.value!![id]!!.image = _channelMetaData.value!![id]!!.image.copy(status = DataStatus.NotLoading, data = null)
                         fetchProfileImage(picture, data = _channelMetaData, pubkey = id)
                     }
                 }
                 // エラーは出さず受信したイベントを無視する
-                catch (_: ArrayIndexOutOfBoundsException) {
-                }
                 catch (_: JSONException) {
                 }
             }
@@ -369,21 +390,23 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 }) {
                     return
                 }
-                if (!post.any { it.event == event }) {
+                if (!post.any { it.event == event && it.from.contains(relay.url()) }) {
                     viewModelScope.launch(Dispatchers.Default) {
                         fetchUserProfile(event.pubkey, relay)
                     }
-                    post.add(EventData(from = listOf(relay.url()), event = event))
-                }
-                else {
-                    for (i in post.indices) {
-                        if (post[i].event == event) {
-                            val from = mutableListOf<String>().apply {
-                                addAll(post[i].from)
-                                add(relay.url())
+                    if (post.any { it.event == event }) {
+                        for (i in post.indices) {
+                            if (post[i].event == event && !post[i].from.contains(relay.url())) {
+                                val from = mutableListOf<String>().apply {
+                                    addAll(post[i].from)
+                                    add(relay.url())
+                                }
+                                post[i] = post[i].copy(from = from)
                             }
-                            post[i] = post[i].copy(from = from)
                         }
+                    }
+                    else {
+                        post.add(EventData(from = listOf(relay.url()), event = event))
                     }
                 }
             }
@@ -568,7 +591,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             _mutex.withLock {
                 if (_postMetaData.value!!.contains(pubkey)) {
                     val data = _postMetaData.value!![pubkey]!!
-                    if (data.pictureUrl.isNotEmpty() && data.image.status == DataStatus.NotLoading && canFetchProfileImage()) {
+                    if (data.pictureUrl.isNotEmpty() && data.image.status == DataStatus.NotLoading) {
                         fetchProfileImage(data.pictureUrl, data = _postMetaData, pubkey = pubkey)
                     }
                     if (data.nip05Address.isNotEmpty() && data.nip05.status == DataStatus.NotLoading) {
@@ -680,7 +703,10 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }
 
-    private suspend fun fetchProfileImage(url : String, data : MutableLiveData<MutableMap<String, MetaData>>, pubkey : String) = withContext(Dispatchers.IO) {
+    private suspend fun fetchProfileImage(url : String, data : MutableLiveData<MutableMap<String, MetaData>>, pubkey : String) = withContext(Dispatchers.Default) {
+        if (!canFetchProfileImage()) {
+            return@withContext
+        }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
                 if (data.value!![pubkey]!!.image.status != DataStatus.NotLoading) {

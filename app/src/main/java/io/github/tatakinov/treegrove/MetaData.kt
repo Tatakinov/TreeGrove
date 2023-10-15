@@ -2,7 +2,7 @@ package io.github.tatakinov.treegrove
 
 import androidx.compose.ui.graphics.ImageBitmap
 
-data class MetaData(val name : String, val about : String = "", val pictureUrl : String = "",
+data class MetaData(val createdAt : Long, val name : String, val about : String = "", val pictureUrl : String = "",
                     val nip05Address : String = "",
                     var image : LoadingDataStatus<ImageBitmap> = LoadingDataStatus(),
                     var nip05 : LoadingDataStatus<Boolean> = LoadingDataStatus()
