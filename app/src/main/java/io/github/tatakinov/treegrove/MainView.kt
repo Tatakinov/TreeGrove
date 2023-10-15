@@ -330,15 +330,29 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     }
                     Divider()
                     if (channelDataList.value!!.isEmpty()) {
-                        Box(modifier = Modifier.weight(1f).padding(bottom = Icon.size).fillMaxWidth()) {
+                        Box(modifier = Modifier
+                            .weight(1f)
+                            .padding(bottom = Icon.size)
+                            .fillMaxWidth()) {
                             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                         }
                     }
                     else if (channelId.value!!.isEmpty()) {
-                        Spacer(
-                            modifier = Modifier
-                                .weight(1f)
-                        )
+                        Box(modifier = Modifier
+                            .weight(1f)
+                            .padding(bottom = Icon.size)
+                            .fillMaxWidth()) {
+                            Column(modifier = Modifier.fillMaxWidth().align(Alignment.Center),
+                                horizontalAlignment = Alignment.CenterHorizontally) {
+                                Image(
+                                    painterResource(id = R.drawable.swipe_right),
+                                    contentDescription = localContext.getString(R.string.description_swipe_to_open_menu),
+                                    modifier = Modifier.height(Icon.size * 2).fillMaxWidth()
+                                )
+                                Text(text = localContext.getString(R.string.description_swipe_to_open_menu), textAlign = TextAlign.Center,
+                                    modifier = Modifier.fillMaxWidth())
+                            }
+                        }
                     } else {
                         EventListView(
                             onGetPostDataList = { postDataList.value!! },
