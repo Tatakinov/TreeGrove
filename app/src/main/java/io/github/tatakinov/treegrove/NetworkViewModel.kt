@@ -190,9 +190,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         }
 
                         override fun onFailure(relay: Relay, t: Throwable, res: Response?) {
-                            viewModelScope.launch(Dispatchers.Main) {
-                                onConnectFailure(relay)
-                            }
+                            onConnectFailure(relay)
                         }
 
                         override fun onTransmit(relay: Relay, dataSize: Int) {

@@ -1,14 +1,12 @@
 package io.github.tatakinov.treegrove
 
 import android.graphics.BitmapFactory
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -67,7 +65,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val postDataList = networkViewModel.postDataList.observeAsState()
     val channelProfileData = networkViewModel.channelProfileData.observeAsState()
     val postProfileData = networkViewModel.postProfileData.observeAsState()
-    val localContext = LocalContext.current
+    val context = LocalContext.current
     val transmittedDataSize = networkViewModel.transmittedDataSize.observeAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val imageURL = remember { mutableStateOf("") }
@@ -98,8 +96,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         Button(onClick = {
                             if (Config.config.privateKey.isEmpty()) {
                                 Toast.makeText(
-                                    localContext,
-                                    localContext.getString(R.string.error_set_private_key),
+                                    context,
+                                    context.getString(R.string.error_set_private_key),
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
@@ -107,7 +105,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 doCreateChannel = true
                             }
                         }, content = {
-                            Image(painterResource(id = R.drawable.edit), contentDescription = localContext.getString(R.string.description_create_channel), modifier = Modifier
+                            Image(painterResource(id = R.drawable.edit), contentDescription = context.getString(R.string.description_create_channel), modifier = Modifier
                                 .width(Icon.size)
                                 .height(Icon.size))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier
@@ -116,8 +114,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         Button(onClick = {
                             if (Config.config.privateKey.isEmpty()) {
                                 Toast.makeText(
-                                    localContext,
-                                    localContext.getString(R.string.error_set_private_key),
+                                    context,
+                                    context.getString(R.string.error_set_private_key),
                                     Toast.LENGTH_SHORT
                                 ).show()
                             }
@@ -125,7 +123,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 doChangeProfile = true
                             }
                         }, content = {
-                            Image(painterResource(id = R.drawable.person), contentDescription = localContext.getString(R.string.description_change_profile), modifier = Modifier
+                            Image(painterResource(id = R.drawable.person), contentDescription = context.getString(R.string.description_change_profile), modifier = Modifier
                                 .width(Icon.size)
                                 .height(Icon.size))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier
@@ -133,7 +131,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             .height(Icon.size))
                     }
                     Divider()
-                    Text(localContext.getString(R.string.list_of_channel), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Text(context.getString(R.string.list_of_channel), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                     Divider()
                     LazyColumn(state = channelListState) {
                         items(items = channelDataList.value!!, key = { it.event.toJSONObject().toString() }) {
@@ -180,7 +178,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         item {
                             NavigationDrawerItem(
                                 label = {
-                                    Text(localContext.getString(R.string.load_more), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                    Text(context.getString(R.string.load_more), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                                 },
                                 selected = false,
                                 onClick = {
@@ -196,7 +194,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     }
                 }
                 if (doCreateChannel) {
-                    ChannelMetaDataView(title = localContext.getString(R.string.description_create_channel),
+                    ChannelMetaDataView(title = context.getString(R.string.description_create_channel),
                         name = "", about = "", picture = "", modifier = Modifier.align(Alignment.TopCenter),
                         onSubmit = { name, about, picture ->
                             scope.launch(Dispatchers.Default) {
@@ -232,7 +230,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         picture = data.pictureUrl
                         nip05 = data.nip05Address
                     }
-                    ProfileMetaDataView(title = localContext.getString(R.string.description_change_profile),
+                    ProfileMetaDataView(title = context.getString(R.string.description_change_profile),
                         name = name, about = about, picture = picture, nip05 = nip05,
                         modifier = Modifier.align(Alignment.TopCenter),
                         onSubmit = { name, about, picture, nip05 ->
@@ -266,7 +264,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         expandedChannelAbout = !expandedChannelAbout
                     }, verticalAlignment = Alignment.CenterVertically) {
                         Image(painterResource(R.drawable.menu),
-                            localContext.getString(R.string.menu),
+                            context.getString(R.string.menu),
                             modifier = Modifier
                                 .width(Icon.size)
                                 .height(Icon.size)
@@ -346,10 +344,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 horizontalAlignment = Alignment.CenterHorizontally) {
                                 Image(
                                     painterResource(id = R.drawable.swipe_right),
-                                    contentDescription = localContext.getString(R.string.description_swipe_to_open_menu),
+                                    contentDescription = context.getString(R.string.description_swipe_to_open_menu),
                                     modifier = Modifier.height(Icon.size * 2).fillMaxWidth()
                                 )
-                                Text(text = localContext.getString(R.string.description_swipe_to_open_menu), textAlign = TextAlign.Center,
+                                Text(text = context.getString(R.string.description_swipe_to_open_menu), textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth())
                             }
                         }
@@ -428,10 +426,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                 Card {
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (image.value == null || image.value!!.status == DataStatus.Loading) {
-                            Text(text = localContext.getString(R.string.loading), modifier = Modifier.align(
+                            Text(text = context.getString(R.string.loading), modifier = Modifier.align(
                                 Alignment.Center))
                         } else if (image.value!!.status == DataStatus.Invalid) {
-                            Text(text = localContext.getString(R.string.invalid_image), modifier = Modifier.align(
+                            Text(text = context.getString(R.string.invalid_image), modifier = Modifier.align(
                                 Alignment.Center))
                         } else if (image.value!!.status == DataStatus.Valid) {
                             val data = image.value!!.data!!
@@ -454,7 +452,13 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     }
     LaunchedEffect(Config.config.relayList) {
         networkViewModel.connect(Config.config.relayList, onConnectFailure = { relay ->
-            Toast.makeText(localContext, localContext.getString(R.string.error_failed_to_connect).format(relay.url()), Toast.LENGTH_SHORT).show()
+            scope.launch(Dispatchers.Main) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.error_failed_to_connect).format(relay.url()),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         }, onNewPost = { _, _ ->
             scope.launch(Dispatchers.Main) {
                 val info = postListState.layoutInfo.visibleItemsInfo
@@ -464,7 +468,13 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
             }
         }, onPostSuccess = { _ ->
         }, onPostFailure = { relay ->
-            Toast.makeText(localContext, localContext.getString(R.string.error_failed_to_post).format(relay.url()), Toast.LENGTH_SHORT).show()
+            scope.launch(Dispatchers.Main) {
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.error_failed_to_post).format(relay.url()),
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
         })
     }
 }
