@@ -377,7 +377,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 }
                             }, onUserNotFound = { pubkey ->
                                 scope.launch(Dispatchers.Default) {
-                                    networkViewModel.fetchUserProfile(pubkey)
+                                    networkViewModel.fetchUserProfile(listOf(pubkey))
                                 }
                             }, onPost = { event ->
                                 scope.launch(Dispatchers.Default) {
