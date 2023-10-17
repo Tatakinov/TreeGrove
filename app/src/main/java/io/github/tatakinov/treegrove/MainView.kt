@@ -63,8 +63,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val channelDataList = networkViewModel.channelList.observeAsState()
     val postListState = rememberLazyListState()
     val postDataList = networkViewModel.postDataList.observeAsState()
-    val channelProfileData = networkViewModel.channelProfileData.observeAsState()
-    val postProfileData = networkViewModel.postProfileData.observeAsState()
+    val channelProfileData = networkViewModel.channelMetaData.observeAsState()
+    val postProfileData = networkViewModel.postMetaData.observeAsState()
     val context = LocalContext.current
     val transmittedDataSize = networkViewModel.transmittedDataSize.observeAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)

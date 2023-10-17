@@ -30,22 +30,26 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     private val _mutex  = Mutex()
     private var _channelId = MutableLiveData<String>("")
     val channelId : LiveData<String> get() = _channelId
-    private val _channelList = MutableLiveData<List<EventData>>(ArrayList())
+    private var _channelListInternal = mutableMapOf<String, MutableList<EventData>>()
+    private val _channelList = MutableLiveData<List<EventData>>(listOf())
     val channelList : LiveData<List<EventData>> get() = _channelList
-    private val _channelMetaData = MutableLiveData<MutableMap<String, MetaData>>(HashMap())
-    val channelProfileData : LiveData<MutableMap<String, MetaData>> get() = _channelMetaData
-    private val _postDataListMap = mutableMapOf<String, List<EventData>>("" to listOf())
+    private val _channelMetaDataInternal = mutableMapOf<String, MetaData>()
+    private val _channelMetaData = MutableLiveData<Map<String, MetaData>>(mapOf())
+    val channelMetaData : LiveData<Map<String, MetaData>> get() = _channelMetaData
+    private val _postDataListMap = mutableMapOf<String, MutableMap<String, MutableList<EventData>>>("" to mutableMapOf())
     private val _postDataList = MutableLiveData<List<EventData>>(listOf())
     val postDataList : LiveData<List<EventData>> get() = _postDataList
-    private val _postMetaData = MutableLiveData<MutableMap<String, MetaData>>(mutableMapOf<String, MetaData>())
-    val postProfileData : LiveData<MutableMap<String, MetaData>> get() = _postMetaData
+    private val _postMetaDataInternal = mutableMapOf<String, MetaData>()
+    private val _postMetaData = MutableLiveData<Map<String, MetaData>>(mapOf())
+    val postMetaData : LiveData<Map<String, MetaData>> get() = _postMetaData
+    private var _transmittedDataSizeInternal = 0
     private val _transmittedDataSize = MutableLiveData<Int>(0)
     val transmittedDataSize : LiveData<Int> get() = _transmittedDataSize
     private val _imageDataMap = mutableMapOf<String, LoadingDataStatus<ByteArray>>()
     private var _image = MutableLiveData<LoadingDataStatus<ByteArray>>()
     val image : LiveData<LoadingDataStatus<ByteArray>> get() = _image
 
-    var _state : NetworkState = NetworkState.Other
+    private var _state : NetworkState = NetworkState.Other
 
     override fun onResume(owner: LifecycleOwner) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -71,29 +75,36 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         override fun onEvent(relay: Relay, event: Event) {
                             viewModelScope.launch(Dispatchers.Default) {
                                 _mutex.withLock {
-                                    val channelListBuffer = mutableListOf<EventData>().apply {
-                                        addAll(_channelList.value!!)
-                                    }
-                                    val postDataListBuffer = mutableListOf<EventData>().apply {
-                                        addAll(_postDataList.value!!)
-                                    }
                                     val channelMetaDataIdList = mutableListOf<String>()
                                     val userMetaDataIdList = mutableListOf<String>()
                                     processEvent(
                                         relay,
                                         event,
-                                        channel = channelListBuffer,
-                                        post = postDataListBuffer,
-                                        channelMetaDataIdList,
-                                        userMetaDataIdList
+                                        channelMetaDataIdList = channelMetaDataIdList,
+                                        userMetaDataIdList = userMetaDataIdList
                                     )
-                                    channelListBuffer.sortByDescending { it.event.createdAt }
-                                    postDataListBuffer.sortByDescending { it.event.createdAt }
-                                    withContext(Dispatchers.Main) {
-                                        _channelList.value = channelListBuffer.toList()
-                                        _postDataList.value = postDataListBuffer.toList()
-                                        _postDataListMap[_channelId.value!!] = postDataListBuffer
+                                    val channelList = mutableListOf<EventData>().apply {
+                                        addAll(_channelListInternal.values.flatten())
+                                        sortByDescending { it.event.createdAt }
                                     }
+                                    val postDataList = mutableListOf<EventData>().apply {
+                                        addAll(_postDataListMap[_channelId.value!!]!!.values.flatten())
+                                        sortByDescending { it.event.createdAt }
+                                    }
+                                    val channelMap = mutableMapOf<String, MetaData>().apply {
+                                        for ((k, v) in _channelMetaDataInternal) {
+                                            put(k, v.copy())
+                                        }
+                                    }
+                                    val userMap = mutableMapOf<String, MetaData>().apply {
+                                        for ((k, v) in _postMetaDataInternal) {
+                                            put(k, v.copy())
+                                        }
+                                    }
+                                    _channelList.postValue(channelList)
+                                    _postDataList.postValue(postDataList)
+                                    _channelMetaData.postValue(channelMap)
+                                    _postMetaData.postValue(userMap)
                                     if (channelMetaDataIdList.isNotEmpty()) {
                                         val l = channelMetaDataIdList.distinct()
                                         val f = Filter(
@@ -108,7 +119,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     if (userMetaDataIdList.isNotEmpty()) {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
                                     }
-                                    if (postDataListBuffer.isNotEmpty() && postDataListBuffer.first().event == event) {
+                                    if (postDataList.isNotEmpty() && postDataList.first().event == event) {
                                         onNewPost(relay, event)
                                     }
                                 }
@@ -140,31 +151,38 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         ): Boolean {
                             viewModelScope.launch(Dispatchers.Default) {
                                 _mutex.withLock {
-                                    val channelListBuffer = mutableListOf<EventData>().apply {
-                                        addAll(_channelList.value!!)
-                                    }
-                                    val postDataListBuffer = mutableListOf<EventData>().apply {
-                                        addAll(_postDataList.value!!)
-                                    }
                                     val channelMetaDataIdList = mutableListOf<String>()
                                     val userMetaDataIdList = mutableListOf<String>()
                                     for (event in events) {
                                         processEvent(
                                             relay,
                                             event,
-                                            channel = channelListBuffer,
-                                            post = postDataListBuffer,
                                             channelMetaDataIdList = channelMetaDataIdList,
                                             userMetaDataIdList = userMetaDataIdList,
                                         )
                                     }
-                                    channelListBuffer.sortByDescending { it.event.createdAt }
-                                    postDataListBuffer.sortByDescending { it.event.createdAt }
-                                    withContext(Dispatchers.Main) {
-                                        _channelList.value = channelListBuffer.toList()
-                                        _postDataList.value = postDataListBuffer.toList()
-                                        _postDataListMap[_channelId.value!!] = postDataListBuffer
+                                    val channelList = mutableListOf<EventData>().apply {
+                                        addAll(_channelListInternal.values.flatten())
+                                        sortByDescending { it.event.createdAt }
                                     }
+                                    val postDataList = mutableListOf<EventData>().apply {
+                                        addAll(_postDataListMap[_channelId.value!!]!!.values.flatten())
+                                        sortByDescending { it.event.createdAt }
+                                    }
+                                    val channelMap = mutableMapOf<String, MetaData>().apply {
+                                        for ((k, v) in _channelMetaDataInternal) {
+                                            put(k, v.copy())
+                                        }
+                                    }
+                                    val userMap = mutableMapOf<String, MetaData>().apply {
+                                        for ((k, v) in _postMetaDataInternal) {
+                                            put(k, v.copy())
+                                        }
+                                    }
+                                    _channelList.postValue(channelList)
+                                    _postDataList.postValue(postDataList)
+                                    _channelMetaData.postValue(channelMap)
+                                    _postMetaData.postValue(userMap)
                                     if (channelMetaDataIdList.isNotEmpty()) {
                                         val l = channelMetaDataIdList.distinct()
                                         val f = Filter(
@@ -194,10 +212,8 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         }
 
                         override fun onTransmit(relay: Relay, dataSize: Int) {
-                            viewModelScope.launch(Dispatchers.Main) {
-                                _transmittedDataSize.value =
-                                    _transmittedDataSize.value!!.plus(dataSize)
-                            }
+                            _transmittedDataSizeInternal += dataSize
+                            _transmittedDataSize.postValue(_transmittedDataSizeInternal)
                         }
 
                         override fun onClose(relay: Relay, code: Int, reason: String) {
@@ -248,7 +264,12 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         relay.closeAllFilter()
         val filter = Filter(kinds = listOf(Kind.ChannelCreation.num), limit = Config.config.fetchSize)
         relay.send(filter)
-        val list = _postDataList.value!!.filter { it.from.contains(relay.url()) }
+        val list = mutableListOf<EventData>().apply {
+            for ((_, v) in _postDataListMap[channelId.value!!]!!) {
+                addAll(v.filter { it.from.contains(relay.url()) })
+            }
+            sortByDescending { it.event.createdAt }
+        }
         if (channelId.value!!.isNotEmpty()) {
             val filter = if (list.isEmpty()) {
                 Filter(
@@ -272,7 +293,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }
 
-    private suspend fun processEvent(relay : Relay, event : Event, channel : MutableList<EventData>, post : MutableList<EventData>,
+    private suspend fun processEvent(relay : Relay, event : Event,
                                      channelMetaDataIdList : MutableList<String>, userMetaDataIdList : MutableList<String>) {
         when (event.kind) {
             Kind.Metadata.num -> {
@@ -282,11 +303,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     val about = json.optString(MetaData.ABOUT, "")
                     val picture = json.optString(MetaData.PICTURE, "")
                     val nip05 = json.optString(MetaData.NIP05, "")
-                    val map = mutableMapOf<String, MetaData>().apply {
-                        for ((k, v) in _postMetaData.value!!) {
-                            put(k, v)
-                        }
-                    }
+                    val map = _postMetaDataInternal
                     if (map.contains(event.pubkey)) {
                         if (map[event.pubkey]!!.createdAt < event.createdAt) {
                             map[event.pubkey] =
@@ -297,12 +314,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         map[event.pubkey] =
                             MetaData(event.createdAt, name, about, picture, nip05Address = nip05)
                     }
-                    withContext(Dispatchers.Main) {
-                        _postMetaData.value = map
-                    }
                     // fetch image
                     if (picture.isNotEmpty()) {
-                        fetchProfileImage(picture, data = _postMetaData, pubkey = event.pubkey)
+                        fetchProfileImage(picture, dest = _postMetaData, internal = map, pubkey = event.pubkey)
                     }
                     if (nip05.isNotEmpty()) {
                         fetchProfileIdentify(nip05, event.pubkey)
@@ -313,7 +327,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             }
 
             Kind.ChannelCreation.num -> {
-                if (channel.none { it.event == event && it.from.contains(relay.url()) }) {
+                if (_channelListInternal.none { map -> map.key == event.id &&
+                            map.value.any { it.event == event } &&
+                            map.value.first { it.event == event }.from.contains(relay.url()) }) {
                     try {
                         val json = JSONObject(event.content)
                         val name = json.optString(
@@ -322,11 +338,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         )
                         val about = json.optString(MetaData.ABOUT, "")
                         val picture = json.optString(MetaData.PICTURE, "")
-                        val map = mutableMapOf<String, MetaData>().apply {
-                            for ((k, v) in _channelMetaData.value!!) {
-                                put(k, v)
-                            }
-                        }
+                        val map = _channelMetaDataInternal
                         if (map.contains(event.id)) {
                             if (map[event.id]!!.createdAt < event.createdAt) {
                                 map[event.id]   =
@@ -337,18 +349,16 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                             map[event.id] =
                                 MetaData(event.createdAt, name, about, picture)
                         }
-                        withContext(Dispatchers.Main) {
-                            _channelMetaData.value = map
-                        }
                         if (picture.isNotEmpty()) {
-                            fetchProfileImage(picture, data = _channelMetaData, pubkey = event.id)
+                            fetchProfileImage(picture, dest = _channelMetaData, internal = map, pubkey = event.id)
                         }
                         channelMetaDataIdList.add(event.id)
-                        if (channel.any {it.event == event}) {
-                            for (i in channel.indices) {
-                                if (channel[i].event == event) {
-                                    channel[i] = channel[i].copy(from = mutableListOf<String>().apply {
-                                        addAll(channel[i].from)
+                        if (_channelListInternal.contains(event.id) && _channelListInternal[event.id]!!.any {it.event == event}) {
+                            val list = _channelListInternal[event.id]!!
+                            for (i in list.indices) {
+                                if (list[i].event == event) {
+                                    list[i] = list[i].copy(from = mutableListOf<String>().apply {
+                                        addAll(list[i].from)
                                         add(relay.url())
                                     })
                                     break
@@ -356,7 +366,10 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                             }
                         }
                         else {
-                            channel.add(EventData(from = listOf(relay.url()), event = event))
+                            if (!_channelListInternal.contains(event.id)) {
+                                _channelListInternal[event.id] = mutableListOf()
+                            }
+                            _channelListInternal[event.id]!!.add(EventData(from = listOf(relay.url()), event = event))
                         }
                     }
                     // エラーは出さず受信したイベントを無視する
@@ -378,12 +391,12 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     val name = json.optString(MetaData.NAME, "")
                     val about = json.optString(MetaData.ABOUT, "")
                     val picture = json.optString(MetaData.PICTURE, "")
-                    val map = mutableMapOf<String, MetaData>().apply {
-                        for ((k, v) in _channelMetaData.value!!) {
-                            put(k, v)
-                        }
-                    }
+                    val map = _channelMetaDataInternal
+                    var isChanged = true
                     if (map.contains(id)) {
+                        if (map[id]!!.pictureUrl == picture) {
+                            isChanged = false
+                        }
                         if (map[id]!!.createdAt < event.createdAt) {
                             map[id] = MetaData(event.createdAt, name, about, picture)
                         }
@@ -391,12 +404,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     else {
                         map[id] = MetaData(event.createdAt, name, about, picture)
                     }
-                    withContext(Dispatchers.Main) {
-                        _channelMetaData.value = map
-                    }
-                    if (picture.isNotEmpty()) {
-                        _channelMetaData.value!![id]!!.image = _channelMetaData.value!![id]!!.image.copy(status = DataStatus.NotLoading, data = null)
-                        fetchProfileImage(picture, data = _channelMetaData, pubkey = id)
+                    if (picture.isNotEmpty() && isChanged) {
+                        map[id]!!.image = map[id]!!.image.copy(status = DataStatus.NotLoading, data = null)
+                        fetchProfileImage(picture, dest = _channelMetaData, internal = map, pubkey = id)
                     }
                 }
                 // エラーは出さず受信したイベントを無視する
@@ -414,23 +424,30 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 }) {
                     return
                 }
-                if (!post.any { it.event == event && it.from.contains(relay.url()) }) {
-                    if (!_postMetaData.value!!.contains(event.pubkey)) {
+                val map = _postDataListMap[_channelId.value!!]!!
+                if (map.none { m -> m.key == event.id &&
+                            m.value.any { it.event == event } &&
+                            m.value.first { it.event == event }.from.contains(relay.url()) }) {
+                    if (!_postMetaDataInternal.contains(event.pubkey)) {
                         userMetaDataIdList.add(event.pubkey)
                     }
-                    if (post.any { it.event == event }) {
-                        for (i in post.indices) {
-                            if (post[i].event == event && !post[i].from.contains(relay.url())) {
-                                val from = mutableListOf<String>().apply {
-                                    addAll(post[i].from)
+                    if (map.contains(event.id) &&
+                        map[event.id]!!.any { it.event == event }) {
+                        val list = map[event.id]!!
+                        for (i in list.indices) {
+                            if (list[i].event == event && !list[i].from.contains(relay.url())) {
+                                list[i] = list[i].copy(from = mutableListOf<String>().apply {
+                                    addAll(list[i].from)
                                     add(relay.url())
-                                }
-                                post[i] = post[i].copy(from = from)
+                                })
                             }
                         }
                     }
                     else {
-                        post.add(EventData(from = listOf(relay.url()), event = event))
+                        if (!map.contains(event.id)) {
+                            map[event.id] = mutableListOf()
+                        }
+                        map[event.id]!!.add(EventData(from = listOf(relay.url()), event = event))
                     }
                 }
             }
@@ -443,21 +460,20 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
     suspend fun connect(configs : List<ConfigRelayData>, onConnectFailure : (Relay) -> Unit, onNewPost: (Relay, Event) -> Unit,
                         onPostSuccess : (Relay) -> Unit, onPostFailure : (Relay) -> Unit) = withContext(Dispatchers.Default) {
-        val list = mutableListOf<EventData>().apply {
-            addAll(_channelList.value!!.filter {
-                for (from in it.from) {
-                    for (config in configs) {
-                        if (config.url == from && config.read) {
-                            return@filter true
-                        }
-                    }
+        _channelListInternal = mutableMapOf<String, MutableList<EventData>>().apply {
+            for ((k, v) in _channelListInternal) {
+                val list = mutableListOf<EventData>().apply {
+                    addAll(v.filter { f -> configs.any { f.from.contains(it.url) } })
                 }
-                return@filter false
-            })
+                if (list.isNotEmpty()) {
+                    put(k, list)
+                }
+            }
         }
-        withContext(Dispatchers.Main) {
-            _channelList.value = list
-        }
+        _channelList.postValue(mutableListOf<EventData>().apply {
+            addAll(_channelListInternal.values.flatten())
+            sortByDescending { it.event.createdAt }
+        })
         for (config in configs) {
             this@NetworkViewModel.connect(config, onConnectFailure, onNewPost, onPostSuccess, onPostFailure)
         }
@@ -507,10 +523,16 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         viewModelScope.launch(Dispatchers.Default) {
             val list : List<EventData>? = when (kind) {
                 Kind.ChannelCreation -> {
-                    _channelList.value!!
+                    mutableListOf<EventData>().apply {
+                        addAll(_channelListInternal.values.flatten())
+                        sortByDescending { it.event.createdAt }
+                    }
                 }
                 Kind.ChannelMessage -> {
-                    _postDataList.value!!
+                    mutableListOf<EventData>().apply {
+                        addAll(_postDataListMap[_channelId.value!!]!!.values.flatten())
+                        sortByDescending { it.event.createdAt }
+                    }
                 }
                 else -> {
                     null
@@ -520,16 +542,12 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 for (relay in _relays) {
                     var u : Long = -1
                     var s : Long = -1
-                    if (list != null) {
-                        list.filter { it.from.contains(relay.url()) }.forEach {
-                            if (u < 0 || u > it.event.createdAt) {
-                                u = it.event.createdAt
-                            }
+                    list?.filter { it.from.contains(relay.url()) }?.forEach {
+                        if (u < 0 || u > it.event.createdAt) {
+                            u = it.event.createdAt
                         }
-                        list.filter { it.from.contains(relay.url()) }.forEach {
-                            if (s < it.event.createdAt) {
-                                s = it.event.createdAt
-                            }
+                        if (s < it.event.createdAt) {
+                            s = it.event.createdAt
                         }
                     }
                     viewModelScope.launch(Dispatchers.IO) {
@@ -569,11 +587,13 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 }
                 if (_channelId.value!!.isNotEmpty()) {
                     if (!_postDataListMap.contains(_channelId.value!!)) {
-                        _postDataListMap[_channelId.value!!] = mutableListOf()
+                        _postDataListMap[_channelId.value!!] = mutableMapOf()
                     }
-                    withContext(Dispatchers.Main) {
-                        _postDataList.value = _postDataListMap[_channelId.value!!]
+                    val postDataList = mutableListOf<EventData>().apply {
+                        addAll(_postDataListMap[_channelId.value!!]!!.values.flatten())
+                        sortByDescending { it.event.createdAt }
                     }
+                    _postDataList.postValue(postDataList)
                     closePostFilter()
                     val filter = Filter(
                         limit = Config.config.fetchSize,
@@ -591,7 +611,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         viewModelScope.launch(Dispatchers.Default) {
             lateinit var list : List<String>
             _mutex.withLock {
-                list = pubkeyList.filterNot { _postMetaData.value!!.contains(it) }
+                list = pubkeyList.filterNot { _postMetaDataInternal.contains(it) }
             }
             if (list.isNotEmpty()) {
                 val filter = Filter(
@@ -611,17 +631,17 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             lateinit var list : List<String>
             _mutex.withLock {
                 pubkeyList.filter {
-                    _postMetaData.value!!.contains(it)
+                    _postMetaDataInternal.contains(it)
                 }.forEach {
-                    val data = _postMetaData.value!![it]!!
+                    val data = _postMetaDataInternal[it]!!
                     if (data.pictureUrl.isNotEmpty() && data.image.status == DataStatus.NotLoading) {
-                        fetchProfileImage(data.pictureUrl, data = _postMetaData, pubkey = it)
+                        fetchProfileImage(data.pictureUrl, dest = _postMetaData, internal = _postMetaDataInternal, pubkey = it)
                     }
                     if (data.nip05Address.isNotEmpty() && data.nip05.status == DataStatus.NotLoading) {
                         fetchProfileIdentify(data.nip05Address, pubkey = it)
                     }
                 }
-                list = pubkeyList.filterNot { _postMetaData.value!!.contains(it) }
+                list = pubkeyList.filterNot { _postMetaDataInternal.contains(it) }
             }
             for (relay in _relays) {
                 fetchUserProfile(list, relay)
@@ -634,39 +654,27 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             return@withContext
         }
         val request = Request.Builder().url(url).build()
-        withContext(Dispatchers.Main) {
-            _transmittedDataSize.value =
-                _transmittedDataSize.value!!.plus(
-                    request.toString().toByteArray().size
-                )
+        _mutex.withLock {
+            _transmittedDataSizeInternal += request.toString().toByteArray().size
+            _transmittedDataSize.postValue(_transmittedDataSizeInternal)
         }
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val client = if (followRedirect) { HttpClient.default } else { HttpClient.noRedirect }
                 val response =
                     client.newCall(request).execute()
-                withContext(Dispatchers.Main) {
-                    _mutex.withLock {
-                        _transmittedDataSize.value =
-                            _transmittedDataSize.value!!.plus(
-                                response.headers.toString().toByteArray().size
-                            )
-                    }
+                _mutex.withLock {
+                    _transmittedDataSizeInternal += response.headers.toString().toByteArray().size
+                    _transmittedDataSize.postValue(_transmittedDataSizeInternal)
                 }
                 if (response.code == 200) {
                     val data = response.body?.bytes()
                     if (data != null) {
-                        withContext(Dispatchers.Main) {
-                            _mutex.withLock {
-                                withContext(Dispatchers.Main) {
-                                    _transmittedDataSize.value =
-                                        _transmittedDataSize.value!!.plus(
-                                            data.size
-                                        )
-                                }
-                            }
-                            onSuccess(data)
+                        _mutex.withLock {
+                            _transmittedDataSizeInternal += data.size
+                            _transmittedDataSize.postValue(_transmittedDataSizeInternal)
                         }
+                        onSuccess(data)
                     } else {
                         onInvalid()
                     }
@@ -681,9 +689,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
     suspend fun fetchImage(url : String) = withContext(Dispatchers.Default) {
         if (_imageDataMap.contains(url) && _imageDataMap[url]!!.status != DataStatus.NotLoading) {
-            withContext(Dispatchers.Main) {
-                _image.value = _imageDataMap[url]!!
-            }
+            _image.postValue(_imageDataMap[url]!!)
         }
         else {
             _imageDataMap[url] = LoadingDataStatus()
@@ -692,14 +698,10 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             }
             fetch(url, onSuccess = {data ->
                 _imageDataMap[url] = _imageDataMap[url]!!.copy(status = DataStatus.Valid, data = data)
-                viewModelScope.launch(Dispatchers.Main) {
-                    _image.value = _imageDataMap[url]!!
-                }
+                _image.postValue(_imageDataMap[url]!!)
             }, onInvalid = {
                 _imageDataMap[url] = _imageDataMap[url]!!.copy(status = DataStatus.Invalid)
-                viewModelScope.launch(Dispatchers.Main) {
-                    _image.value = _imageDataMap[url]!!
-                }
+                _image.postValue(_imageDataMap[url]!!)
             }, onFailure = {
                 _imageDataMap[url] = _imageDataMap[url]!!.copy(status = DataStatus.NotLoading)
             })
@@ -712,42 +714,41 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             close()
             reconnect()
             if (state == NetworkState.Wifi) {
-                for ((k, v) in _channelMetaData.value!!) {
+                for ((k, v) in _channelMetaDataInternal) {
                     if (v.pictureUrl.isNotEmpty()) {
-                        fetchProfileImage(v.pictureUrl, _channelMetaData, k)
+                        fetchProfileImage(v.pictureUrl, _channelMetaData, _channelMetaDataInternal, k)
                     }
                 }
-                for ((k, v) in _postMetaData.value!!) {
+                for ((k, v) in _postMetaDataInternal) {
                     if (v.pictureUrl.isNotEmpty()) {
-                        fetchProfileImage(v.pictureUrl, _postMetaData, k)
+                        fetchProfileImage(v.pictureUrl, _postMetaData, _postMetaDataInternal, k)
                     }
                 }
             }
         }
     }
 
-    private suspend fun fetchProfileImage(url : String, data : MutableLiveData<MutableMap<String, MetaData>>, pubkey : String) = withContext(Dispatchers.Default) {
+    private suspend fun fetchProfileImage(url : String, dest : MutableLiveData<Map<String, MetaData>>,
+                                          internal : MutableMap<String, MetaData>, pubkey : String) = withContext(Dispatchers.Default) {
         if (!canFetchProfileImage()) {
             return@withContext
         }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                if (data.value!![pubkey]!!.image.status != DataStatus.NotLoading) {
+                if (internal[pubkey]!!.image.status != DataStatus.NotLoading) {
                     return@withLock
                 }
-                data.value!![pubkey]!!.image = data.value!![pubkey]!!.image.copy(status = DataStatus.Loading)
+                internal[pubkey]!!.image = internal[pubkey]!!.image.copy(status = DataStatus.Loading)
                 val refresh : (DataStatus, ImageBitmap?) -> Unit = { status, image ->
                     viewModelScope.launch(Dispatchers.Default) {
                         _mutex.withLock {
+                            internal[pubkey]!!.image = internal[pubkey]!!.image.copy(status = status, data = image)
                             val map = mutableMapOf<String, MetaData>().apply {
-                                for ((k, v) in data.value!!) {
+                                for ((k, v) in internal) {
                                     put(k, v.copy())
                                 }
                             }
-                            map[pubkey]!!.image = map[pubkey]!!.image.copy(status = status, data = image)
-                            withContext(Dispatchers.Main) {
-                                data.value = map
-                            }
+                            dest.postValue(map)
                         }
                     }
                 }
@@ -787,23 +788,22 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         val domain = match.groups[2]!!.value
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                val data = _postMetaData
-                if (data.value!![pubkey]!!.nip05.status != DataStatus.NotLoading) {
+                val internal = _postMetaDataInternal
+                val dest = _postMetaData
+                if (internal[pubkey]!!.nip05.status != DataStatus.NotLoading) {
                     return@withLock
                 }
-                data.value!![pubkey]!!.nip05 = data.value!![pubkey]!!.nip05.copy(status = DataStatus.Loading)
+                internal[pubkey]!!.nip05 = internal[pubkey]!!.nip05.copy(status = DataStatus.Loading)
                 val refresh : (DataStatus, Boolean?) -> Unit = { status, nip05 ->
                     viewModelScope.launch(Dispatchers.Default) {
                         _mutex.withLock {
+                            internal[pubkey]!!.nip05 = internal[pubkey]!!.nip05.copy(status = status, data = nip05)
                             val map = mutableMapOf<String, MetaData>().apply {
-                                for ((k, v) in data.value!!) {
+                                for ((k, v) in internal) {
                                     put(k, v.copy())
                                 }
                             }
-                            map[pubkey]!!.nip05 = map[pubkey]!!.nip05.copy(status = status, data = nip05)
-                            withContext(Dispatchers.Main) {
-                                data.value = map
-                            }
+                            dest.postValue(map)
                         }
                     }
                 }
