@@ -27,6 +27,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,6 +75,11 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     var expandedChannelAbout by remember {
         mutableStateOf(false)
     }
+    var searchChannel by remember { mutableStateOf("") }
+    val manager = LocalFocusManager.current
+    var showRelayConnectionStatus by remember { mutableStateOf(false) }
+    val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
+
     Box(modifier = Modifier.fillMaxSize()) {
         ModalNavigationDrawer(
             drawerState = drawerState,
@@ -84,15 +91,15 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         Button(onClick = {
                             scope.launch(Dispatchers.Main) {
                                 drawerState.close()
+                                manager.clearFocus()
                             }
                             onNavigate()
                         }, content = {
                             Image(painterResource(id = R.drawable.setting), contentDescription = "setting", modifier = Modifier
-                                .width(Icon.size)
-                                .height(Icon.size))
+                                .width(Const.ACTION_ICON_SIZE)
+                                .height(Const.ACTION_ICON_SIZE))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier
-                            .weight(1f)
-                            .height(Icon.size))
+                            .weight(1f))
                         Button(onClick = {
                             if (Config.config.privateKey.isEmpty()) {
                                 Toast.makeText(
@@ -102,15 +109,15 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 ).show()
                             }
                             else {
+                                manager.clearFocus()
                                 doCreateChannel = true
                             }
                         }, content = {
                             Image(painterResource(id = R.drawable.edit), contentDescription = context.getString(R.string.description_create_channel), modifier = Modifier
-                                .width(Icon.size)
-                                .height(Icon.size))
+                                .width(Const.ACTION_ICON_SIZE)
+                                .height(Const.ACTION_ICON_SIZE))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier
-                            .weight(1f)
-                            .height(Icon.size))
+                            .weight(1f))
                         Button(onClick = {
                             if (Config.config.privateKey.isEmpty()) {
                                 Toast.makeText(
@@ -120,21 +127,74 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 ).show()
                             }
                             else {
+                                manager.clearFocus()
                                 doChangeProfile = true
                             }
                         }, content = {
                             Image(painterResource(id = R.drawable.person), contentDescription = context.getString(R.string.description_change_profile), modifier = Modifier
-                                .width(Icon.size)
-                                .height(Icon.size))
+                                .width(Const.ACTION_ICON_SIZE)
+                                .height(Const.ACTION_ICON_SIZE))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier
-                            .weight(1f)
-                            .height(Icon.size))
+                            .weight(1f))
                     }
                     Divider()
-                    Text(context.getString(R.string.list_of_channel), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(painterResource(id = R.drawable.search), contentDescription = context.getString(R.string.search), modifier = Modifier
+                            .height(Const.ACTION_ICON_SIZE)
+                            .width(Const.ACTION_ICON_SIZE))
+                        TextField(value = searchChannel, onValueChange = {
+                            searchChannel = it.replace("\n", "")
+                        }, maxLines = 1)
+                    }
                     Divider()
+                    val list = if (searchChannel.isEmpty()) {
+                        channelDataList.value!!
+                    }
+                    else {
+                        channelDataList.value!!.filter {
+                            val profileData = channelProfileData.value!![it.event.id]!!
+                            profileData.name.contains(searchChannel.toRegex())
+                        }
+                    }
                     LazyColumn(state = channelListState) {
-                        items(items = channelDataList.value!!, key = { it.event.toJSONObject().toString() }) {
+                        item {
+                            Text(context.getString(R.string.relay_connection_status), textAlign = TextAlign.Center, modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp, bottom = 10.dp)
+                                .clickable {
+                                    showRelayConnectionStatus = !showRelayConnectionStatus
+                                })
+                        }
+                        item {
+                            Divider()
+                        }
+                        if (showRelayConnectionStatus) {
+                            items(items = relayConnectionStatus.value!!.keys.toList(), key = { it }) {
+                                Row(modifier = Modifier.fillMaxWidth().clickable {
+                                    networkViewModel.reconnect(it)
+                                }, verticalAlignment = Alignment.CenterVertically) {
+                                    Text(text = it, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), maxLines = 1)
+                                    if (relayConnectionStatus.value!![it]!!) {
+                                        Image(painterResource(id = R.drawable.ok), contentDescription = context.getString(R.string.ok), modifier = Modifier.height(Const.ICON_SIZE))
+                                    }
+                                    else {
+                                        Image(painterResource(id = R.drawable.close), contentDescription = context.getString(R.string.ng), modifier = Modifier.height(Const.ICON_SIZE))
+                                    }
+                                }
+                            }
+                            item {
+                                Divider()
+                            }
+                        }
+                        item {
+                            Text(context.getString(R.string.list_of_channel), textAlign = TextAlign.Center, modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp, bottom = 10.dp))
+                        }
+                        item {
+                            Divider()
+                        }
+                        items(items = list, key = { it.event.toJSONObject().toString() }) {
                             if (channelProfileData.value!!.contains(it.event.id)) {
                                 val profileData = channelProfileData.value!![it.event.id]!!
                                 NavigationDrawerItem(
@@ -145,28 +205,29 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                                     painterResource(id = R.drawable.no_image),
                                                     contentDescription = "no image",
                                                     modifier = Modifier
-                                                        .width(Icon.size)
-                                                        .height(Icon.size)
+                                                        .width(Const.ACTION_ICON_SIZE)
+                                                        .height(Const.ACTION_ICON_SIZE)
                                                 )
                                             } else {
                                                 Image(
                                                     profileData.image.data!!,
                                                     contentDescription = profileData.name,
                                                     modifier = Modifier
-                                                        .width(Icon.size)
-                                                        .height(Icon.size)
+                                                        .width(Const.ACTION_ICON_SIZE)
+                                                        .height(Const.ACTION_ICON_SIZE)
                                                 )
                                             }
                                         }
                                     },
                                     label = {
-                                        Text(profileData.name, modifier = Modifier.padding(start = 10.dp), overflow = TextOverflow.Clip)
+                                        Text(profileData.name, modifier = Modifier.padding(start = 10.dp), maxLines = 2, overflow = TextOverflow.Clip)
                                     },
                                     selected = false,
                                     onClick = {
                                         scope.launch(Dispatchers.Main) {
-                                            networkViewModel.setChannel(it.event.id)
+                                            manager.clearFocus()
                                             drawerState.close()
+                                            networkViewModel.setChannel(it.event.id)
                                         }
                                     }
                                 )
@@ -266,8 +327,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         Image(painterResource(R.drawable.menu),
                             context.getString(R.string.menu),
                             modifier = Modifier
-                                .width(Icon.size)
-                                .height(Icon.size)
+                                .width(Const.ICON_SIZE)
+                                .height(Const.ICON_SIZE)
                                 .clickable {
                                     scope.launch(Dispatchers.Main) {
                                         drawerState.open()
@@ -296,23 +357,25 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                     painterResource(id = R.drawable.no_image),
                                     "no_image",
                                     modifier = Modifier
-                                        .width(Icon.size)
-                                        .height(Icon.size)
+                                        .width(Const.ICON_SIZE)
+                                        .height(Const.ICON_SIZE)
                                 )
                             } else {
                                 Image(
                                     channelImage,
                                     channelId.value!!,
                                     modifier = Modifier
-                                        .width(Icon.size)
-                                        .height(Icon.size)
+                                        .width(Const.ICON_SIZE)
+                                        .height(Const.ICON_SIZE)
                                 )
                             }
                         }
                         Text(
                             text = channelName,
                             modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
+                            textAlign = TextAlign.Center,
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 2
                         )
                     }
                     if (expandedChannelAbout) {
@@ -330,7 +393,6 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     if (channelDataList.value!!.isEmpty()) {
                         Box(modifier = Modifier
                             .weight(1f)
-                            .padding(bottom = Icon.size)
                             .fillMaxWidth()) {
                             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
                         }
@@ -338,14 +400,17 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     else if (channelId.value!!.isEmpty()) {
                         Box(modifier = Modifier
                             .weight(1f)
-                            .padding(bottom = Icon.size)
                             .fillMaxWidth()) {
-                            Column(modifier = Modifier.fillMaxWidth().align(Alignment.Center),
+                            Column(modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.Center),
                                 horizontalAlignment = Alignment.CenterHorizontally) {
                                 Image(
                                     painterResource(id = R.drawable.swipe_right),
                                     contentDescription = context.getString(R.string.description_swipe_to_open_menu),
-                                    modifier = Modifier.height(Icon.size * 2).fillMaxWidth()
+                                    modifier = Modifier
+                                        .height(Const.ACTION_ICON_SIZE * 2)
+                                        .fillMaxWidth()
                                 )
                                 Text(text = context.getString(R.string.description_swipe_to_open_menu), textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth())
@@ -408,7 +473,6 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     }
                 }
                 TransmittedDataView(modifier = Modifier
-                    .height(Icon.size)
                     .align(Alignment.BottomCenter),
                     onGetTransmittedDataSize = {
                         transmittedDataSize.value!!
@@ -455,7 +519,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
             scope.launch(Dispatchers.Main) {
                 Toast.makeText(
                     context,
-                    context.getString(R.string.error_failed_to_connect).format(relay.url()),
+                    context.getString(R.string.error_failed_to_connect).format(relay.url),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -471,7 +535,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
             scope.launch(Dispatchers.Main) {
                 Toast.makeText(
                     context,
-                    context.getString(R.string.error_failed_to_post).format(relay.url()),
+                    context.getString(R.string.error_failed_to_post).format(relay.url),
                     Toast.LENGTH_SHORT
                 ).show()
             }

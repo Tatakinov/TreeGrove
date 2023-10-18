@@ -60,13 +60,13 @@ fun ChannelMetaDataView(title : String, name : String, about : String, picture :
                         onSubmit(name, about, picture)
                     }
                 }, content = {
-                    Image(painterResource(id = R.drawable.send), contentDescription = context.getString(R.string.send), modifier = Modifier.width(Icon.size).height(Icon.size))
-                }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier.height(Icon.size))
+                    Image(painterResource(id = R.drawable.send), contentDescription = context.getString(R.string.send), modifier = Modifier.width(Const.ACTION_ICON_SIZE).height(Const.ACTION_ICON_SIZE))
+                }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))
                 Button(onClick = {
                     onCancel()
                 }, content = {
-                    Image(painterResource(id = R.drawable.close), contentDescription = context.getString(R.string.cancel), modifier = Modifier.width(Icon.size).height(Icon.size))
-                }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier.height(Icon.size))
+                    Image(painterResource(id = R.drawable.close), contentDescription = context.getString(R.string.cancel), modifier = Modifier.width(Const.ACTION_ICON_SIZE).height(Const.ACTION_ICON_SIZE))
+                }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))
             }
         }
     }

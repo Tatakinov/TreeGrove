@@ -38,4 +38,6 @@
     <string name="error_invalid_address">無効なアドレスです</string>
     <string name="verify">認証</string>
     <string name="description_swipe_to_open_menu">スワイプしてメニューを開く</string>
+    <string name="search">検索</string>
+    <string name="relay_connection_status">リレーの接続状況</string>
 </resources>

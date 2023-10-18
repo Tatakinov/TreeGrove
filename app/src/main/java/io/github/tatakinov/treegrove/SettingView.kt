@@ -17,7 +17,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -94,8 +93,8 @@ fun SettingView(onUpdated : () -> Unit) {
                             relayList.removeAt(index)
                         }, content = {
                             Image(painterResource(id = R.drawable.close), contentDescription = "Cancel", modifier = Modifier
-                                .width(Icon.size)
-                                .height(Icon.size))
+                                .width(Const.ACTION_ICON_SIZE)
+                                .height(Const.ACTION_ICON_SIZE))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {

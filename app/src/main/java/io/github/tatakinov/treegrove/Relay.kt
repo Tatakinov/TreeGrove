@@ -24,10 +24,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
     private val reentrantLock = ReentrantLock()
     var read = _config.read
     var write = _config.write
-
-    fun url() : String {
-        return _config.url
-    }
+    val url : String get() = _config.url
 
     fun connect() {
         if (isConnected()) {

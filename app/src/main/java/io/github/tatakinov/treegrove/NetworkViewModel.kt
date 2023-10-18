@@ -50,6 +50,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     val image : LiveData<LoadingDataStatus<ByteArray>> get() = _image
 
     private var _state : NetworkState = NetworkState.Other
+    private val _relayConnectionStatusInternal = mutableMapOf<String, Boolean>()
+    private val _relayConnectionStatus = MutableLiveData<Map<String, Boolean>>()
+    val relayConnectionStatus : LiveData<Map<String, Boolean>> get() = _relayConnectionStatus
 
     override fun onResume(owner: LifecycleOwner) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -62,9 +65,15 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
                 lateinit var relay: Relay
-                if (!_relays.any { it.url() == config.url }) {
+                if (!_relays.any { it.url == config.url }) {
                     relay = Relay(config, object : OnRelayListener {
                         override fun onConnected(relay: Relay) {
+                            _relayConnectionStatusInternal[relay.url] = true
+                            _relayConnectionStatus.postValue(mutableMapOf<String, Boolean>().apply {
+                                for ((k, v) in _relayConnectionStatusInternal) {
+                                    put(k, v)
+                                }
+                            })
                             viewModelScope.launch(Dispatchers.IO) {
                                 _mutex.withLock {
                                     sendInInitialize(relay)
@@ -208,6 +217,12 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         }
 
                         override fun onFailure(relay: Relay, t: Throwable, res: Response?) {
+                            _relayConnectionStatusInternal[relay.url] = false
+                            _relayConnectionStatus.postValue(mutableMapOf<String, Boolean>().apply {
+                                for ((k, v) in _relayConnectionStatusInternal) {
+                                    put(k, v)
+                                }
+                            })
                             onConnectFailure(relay)
                         }
 
@@ -227,12 +242,12 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     _relays.add(relay)
                 }
                 else {
-                    _relays.filter {it.url() == config.url}.forEach {
+                    _relays.filter {it.url == config.url}.forEach {
                         it.read = config.read
                         it.write = config.write
                     }
                 }
-                _relays.filter { it.url() == config.url }.forEach {
+                _relays.filter { it.url == config.url }.forEach {
                     reconnect(it)
                 }
             }
@@ -260,13 +275,23 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }
 
+    fun reconnect(url : String) {
+        for (relay in _relays) {
+            if (relay.url == url) {
+                viewModelScope.launch(Dispatchers.Default) {
+                    reconnect(relay)
+                }
+            }
+        }
+    }
+
     private suspend fun sendInInitialize(relay : Relay) = withContext(Dispatchers.IO) {
         relay.closeAllFilter()
         val filter = Filter(kinds = listOf(Kind.ChannelCreation.num), limit = Config.config.fetchSize)
         relay.send(filter)
         val list = mutableListOf<EventData>().apply {
             for ((_, v) in _postDataListMap[channelId.value!!]!!) {
-                addAll(v.filter { it.from.contains(relay.url()) })
+                addAll(v.filter { it.from.contains(relay.url) })
             }
             sortByDescending { it.event.createdAt }
         }
@@ -329,7 +354,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             Kind.ChannelCreation.num -> {
                 if (_channelListInternal.none { map -> map.key == event.id &&
                             map.value.any { it.event == event } &&
-                            map.value.first { it.event == event }.from.contains(relay.url()) }) {
+                            map.value.first { it.event == event }.from.contains(relay.url) }) {
                     try {
                         val json = JSONObject(event.content)
                         val name = json.optString(
@@ -359,7 +384,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                 if (list[i].event == event) {
                                     list[i] = list[i].copy(from = mutableListOf<String>().apply {
                                         addAll(list[i].from)
-                                        add(relay.url())
+                                        add(relay.url)
                                     })
                                     break
                                 }
@@ -369,7 +394,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                             if (!_channelListInternal.contains(event.id)) {
                                 _channelListInternal[event.id] = mutableListOf()
                             }
-                            _channelListInternal[event.id]!!.add(EventData(from = listOf(relay.url()), event = event))
+                            _channelListInternal[event.id]!!.add(EventData(from = listOf(relay.url), event = event))
                         }
                     }
                     // エラーは出さず受信したイベントを無視する
@@ -427,7 +452,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 val map = _postDataListMap[_channelId.value!!]!!
                 if (map.none { m -> m.key == event.id &&
                             m.value.any { it.event == event } &&
-                            m.value.first { it.event == event }.from.contains(relay.url()) }) {
+                            m.value.first { it.event == event }.from.contains(relay.url) }) {
                     if (!_postMetaDataInternal.contains(event.pubkey)) {
                         userMetaDataIdList.add(event.pubkey)
                     }
@@ -435,10 +460,10 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         map[event.id]!!.any { it.event == event }) {
                         val list = map[event.id]!!
                         for (i in list.indices) {
-                            if (list[i].event == event && !list[i].from.contains(relay.url())) {
+                            if (list[i].event == event && !list[i].from.contains(relay.url)) {
                                 list[i] = list[i].copy(from = mutableListOf<String>().apply {
                                     addAll(list[i].from)
-                                    add(relay.url())
+                                    add(relay.url)
                                 })
                             }
                         }
@@ -447,7 +472,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         if (!map.contains(event.id)) {
                             map[event.id] = mutableListOf()
                         }
-                        map[event.id]!!.add(EventData(from = listOf(relay.url()), event = event))
+                        map[event.id]!!.add(EventData(from = listOf(relay.url), event = event))
                     }
                 }
             }
@@ -479,11 +504,11 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                _relays.filter { !configs.contains(ConfigRelayData(it.url())) }.forEach {
+                _relays.filter { !configs.contains(ConfigRelayData(it.url)) }.forEach {
                     it.close()
                 }
                 _relays = mutableListOf<Relay>().apply {
-                    addAll(_relays.filter { configs.contains(ConfigRelayData(it.url())) })
+                    addAll(_relays.filter { configs.contains(ConfigRelayData(it.url)) })
                 }
             }
         }
@@ -501,7 +526,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock() {
                 for (relay in _relays) {
-                    if (relay.url() == url) {
+                    if (relay.url == url) {
                         remove(relay)
                     }
                 }
@@ -542,7 +567,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 for (relay in _relays) {
                     var u : Long = -1
                     var s : Long = -1
-                    list?.filter { it.from.contains(relay.url()) }?.forEach {
+                    list?.filter { it.from.contains(relay.url) }?.forEach {
                         if (u < 0 || u > it.event.createdAt) {
                             u = it.event.createdAt
                         }

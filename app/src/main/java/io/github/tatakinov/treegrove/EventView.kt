@@ -117,8 +117,8 @@ fun EventListView(onGetPostDataList : () -> List<EventData>, onGetLazyListState 
             }
         )
     } else {
-        ActionView(modifier = Modifier
-            .height(Icon.size),
+        ActionView(
+            modifier = Modifier.height(Const.ICON_SIZE),
             onClickGoToTop = {
                 scope.launch(Dispatchers.Main) {
                     onGetLazyListState().scrollToItem(0)
@@ -339,12 +339,12 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onCl
                         painterResource(id = R.drawable.no_image),
                         "no_image",
                         modifier = Modifier
-                            .width(Icon.size)
-                            .height(Icon.size)                    )
+                            .width(Const.ICON_SIZE)
+                            .height(Const.ICON_SIZE)                    )
                 } else {
                     Image(image, url,  modifier = Modifier
-                        .width(Icon.size)
-                        .height(Icon.size))
+                        .width(Const.ICON_SIZE)
+                        .height(Const.ICON_SIZE))
                 }
             }
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp)) {

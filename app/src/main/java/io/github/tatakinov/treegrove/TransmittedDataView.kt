@@ -5,13 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 
 @Composable
 fun TransmittedDataView(modifier : Modifier, onGetTransmittedDataSize : () -> Int) {
@@ -23,7 +21,7 @@ fun TransmittedDataView(modifier : Modifier, onGetTransmittedDataSize : () -> In
                 modifier = Modifier
                     .weight(1f)
             )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(Icon.size)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(Const.ICON_SIZE)) {
                 lateinit var unit: String
                 var s: Double = onGetTransmittedDataSize().toDouble()
                 if (s < 1024) {
