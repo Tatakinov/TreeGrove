@@ -5,24 +5,24 @@ import java.lang.Exception
 
 class NIP19 {
     companion object {
-        private fun parseTLV(data: ByteArray): HashMap<Byte, ArrayList<ByteArray>> {
-            var remain = data
-            var result = HashMap<Byte, ArrayList<ByteArray>>()
-            while (remain.isNotEmpty()) {
-                val t = remain[0]
-                val l = remain[1]
+        fun parseTLV(data: ByteArray): Map<Byte, MutableList<ByteArray>> {
+            var index = 0
+            val result = mutableMapOf<Byte, MutableList<ByteArray>>()
+            while (index < data.size) {
+                val t = data[index + 0]
+                val l = data[index + 1]
                 if (l.toInt() == 0) {
                     throw Exception("malformed TLV $t")
                 }
-                val v = remain.slice(2..2 + l)
-                remain.slice(2 + l until remain.size).also { remain = it.toByteArray() }
+                val v = data.slice(index + 2 until index + 2 + l)
+                index += 2 + l
                 if (v.isEmpty()) {
                     throw Exception("not enough data to read on TLV $t")
                 }
-                if (!result.containsKey(t)) {
-                    result[t] = ArrayList<ByteArray>()
+                if (!result.contains(t)) {
+                    result[t] = mutableListOf()
                 }
-                result[t]?.add(v.toByteArray())
+                result[t]!!.add(v.toByteArray())
             }
             return result
         }

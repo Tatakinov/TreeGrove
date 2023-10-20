@@ -65,6 +65,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val channelDataList = networkViewModel.channelList.observeAsState()
     val postListState = rememberLazyListState()
     val postDataList = networkViewModel.postDataList.observeAsState()
+    val eventMap = networkViewModel.eventMap.observeAsState()
     val channelProfileData = networkViewModel.channelMetaData.observeAsState()
     val postProfileData = networkViewModel.postMetaData.observeAsState()
     val context = LocalContext.current
@@ -170,9 +171,11 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         }
                         if (showRelayConnectionStatus) {
                             items(items = relayConnectionStatus.value!!.keys.toList(), key = { it }) {
-                                Row(modifier = Modifier.fillMaxWidth().clickable {
-                                    networkViewModel.reconnect(it)
-                                }, verticalAlignment = Alignment.CenterVertically) {
+                                Row(modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        networkViewModel.reconnect(it)
+                                    }, verticalAlignment = Alignment.CenterVertically) {
                                     Text(text = it, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), maxLines = 1)
                                     if (relayConnectionStatus.value!![it]!!) {
                                         Image(painterResource(id = R.drawable.ok), contentDescription = context.getString(R.string.ok), modifier = Modifier.height(Const.ICON_SIZE))
@@ -244,10 +247,11 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 selected = false,
                                 onClick = {
                                     val filter = Filter(
+                                        kinds = listOf(Kind.ChannelCreation.num),
                                         limit = Config.config.fetchSize,
                                     )
                                     scope.launch(Dispatchers.Default) {
-                                        networkViewModel.send(filter, Kind.ChannelCreation, until = channelDataList.value!!.isNotEmpty())
+                                        networkViewModel.send(filter, until = channelDataList.value!!.isNotEmpty())
                                     }
                                 }
                             )
@@ -419,6 +423,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     } else {
                         EventListView(
                             onGetPostDataList = { postDataList.value!! },
+                            onGetEventMap = { eventMap.value!! },
                             onGetLazyListState = { postListState },
                             onGetProfileData = { postProfileData.value!! },
                             onGetChannelId = { channelId.value!! },
@@ -432,15 +437,20 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 .weight(1f),
                             onRefresh = {
                                 val filter = Filter(
+                                    kinds = listOf(Kind.ChannelMessage.num),
                                     limit = Config.config.fetchSize,
                                     tags = mapOf("e" to listOf(channelId.value!!))
                                 )
                                 scope.launch(Dispatchers.Default) {
-                                    networkViewModel.send(filter, Kind.ChannelMessage, until = postDataList.value!!.isNotEmpty())
+                                    networkViewModel.send(filter)
                                 }
                             }, onUserNotFound = { pubkey ->
                                 scope.launch(Dispatchers.Default) {
                                     networkViewModel.fetchUserProfile(listOf(pubkey))
+                                }
+                            }, onEventNotFound = { filter ->
+                                scope.launch(Dispatchers.Default) {
+                                    networkViewModel.send(filter)
                                 }
                             }, onPost = { event ->
                                 scope.launch(Dispatchers.Default) {

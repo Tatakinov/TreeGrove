@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
@@ -47,8 +48,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import fr.acinq.secp256k1.Hex
 import io.github.tatakinov.treegrove.nostr.Event
+import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.NIP19
 import kotlinx.coroutines.Dispatchers
@@ -58,11 +61,14 @@ import java.util.Date
 
 
 @Composable
-fun EventListView(onGetPostDataList : () -> List<EventData>, onGetLazyListState : () -> LazyListState,
+fun EventListView(onGetPostDataList : () -> List<EventData>,
+                  onGetEventMap : () -> Map<String, Set<Event>>,
+                  onGetLazyListState : () -> LazyListState,
                   onGetProfileData: () -> Map<String, MetaData>,
                   onGetChannelId : () -> String,
                   onClickImageURL : (String) -> Unit, modifier: Modifier, onRefresh : () -> Unit,
-                  onUserNotFound: (String) -> Unit, onPost : (Event) -> Unit,
+                  onUserNotFound: (String) -> Unit, onEventNotFound: (Filter) -> Unit,
+                  onPost : (Event) -> Unit,
                   onHide: (Event) -> Unit, onMute: (Event) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -78,10 +84,15 @@ fun EventListView(onGetPostDataList : () -> List<EventData>, onGetLazyListState 
     }
     LazyColumn(state = onGetLazyListState(), modifier = modifier) {
         items(items = onGetPostDataList(), key = { it.event.toJSONObject().toString() }) { event ->
-            EventView(event.event, onGetProfileData, onClickImageURL = onClickImageURL, onUserNotFound = onUserNotFound, onReply = {e ->
-                replyEvent = e
-                doPost = true
-            }, onHide = onHide, onMute = onMute)
+            EventView(event.event, onGetEventMap = onGetEventMap, onGetProfileData,
+                onClickImageURL = onClickImageURL,
+                onUserNotFound = onUserNotFound,
+                onEventNotFound = onEventNotFound,
+                onReply = {e ->
+                    replyEvent = e
+                    doPost = true
+                }, onHide = onHide, onMute = onMute
+            )
         }
         item {
             Button(onClick = { onRefresh() }, content = {
@@ -208,8 +219,10 @@ fun EventListView(onGetPostDataList : () -> List<EventData>, onGetLazyListState 
 }
 
 @Composable
-fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onClickImageURL : (String) -> Unit,
-              onUserNotFound : (String) -> Unit, onReply: (Event) -> Unit, onHide : (Event) -> Unit, onMute : (Event) -> Unit) {
+fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
+              onGetProfileData : () -> Map<String, MetaData>, onClickImageURL : (String) -> Unit,
+              onUserNotFound : (String) -> Unit, onEventNotFound : (Filter) -> Unit,
+              onReply: (Event) -> Unit, onHide : (Event) -> Unit, onMute : (Event) -> Unit) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     var name = NIP19.encode("npub", Hex.decode(post.pubkey)).take(16) + "..."
@@ -222,6 +235,9 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onCl
     }
     var doMuteUser by remember {
         mutableStateOf(false)
+    }
+    var noteReference by remember {
+        mutableStateOf("")
     }
     if (postProfileData.contains(post.pubkey)) {
         val data    = postProfileData[post.pubkey]!!
@@ -255,7 +271,7 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onCl
                     val bech32str = value.substring(6)
                     val (hrp, data) = NIP19.decode(bech32str)
                     val pubkey = Hex.encode(data)
-                    if (hrp.isEmpty()) {
+                    if (hrp != "npub") {
                         Log.d("EventView", "invalid bech32.")
                         return@label false
                     } else {
@@ -273,6 +289,58 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onCl
                         }
                         return@label true
                     }
+                },
+                "^nostr:note1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
+                    val bech32str = value.substring(6)
+                    val (hrp, data) = NIP19.decode(bech32str)
+                    val note = String(data)
+                    if (hrp != "note") {
+                        Log.d("EventView", "invalid bech32.")
+                        return@label false
+                    } else {
+                        pushStringAnnotation(tag = "note", annotation = value)
+                        withStyle(style = SpanStyle(color = Color.Green)) {
+                            append(value)
+                        }
+                        pop()
+                        return@label true
+                    }
+                },
+                "^nostr:nevent1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
+                    val bech32str = value.substring(6)
+                    val (hrp, data) = NIP19.decode(bech32str)
+                    try {
+                        val tlv = NIP19.parseTLV(data)
+                        if (hrp != "nevent") {
+                            Log.d("EventView", "invalid bech32.")
+                            return@label false
+                        }
+                        if (tlv[0] == null || tlv[0]!!.isEmpty()) {
+                            throw Exception("missing TLV 0 for nevent")
+                        }
+                        if (tlv[0]!![0].size != 32) {
+                            throw Exception("TLV 0 should be 32 bytes")
+                        }
+                        if (tlv[2] != null && tlv[2]!!.isNotEmpty() && tlv[2]!![0].size != 32) {
+                            throw Exception("TLV 2 should be 32 bytes")
+                        }
+                        if (tlv[3] != null && tlv[3]!!.isNotEmpty() && tlv[3]!![0].size != 4) {
+                            throw Exception("TLV 3 should be 4 bytes")
+                        }
+                        pushStringAnnotation(tag = "note", annotation = value)
+                        withStyle(style = SpanStyle(color = Color.Green)) {
+                            append(value)
+                        }
+                        pop()
+                        return@label true
+                    }
+                    catch (e : Exception) {
+                        e.printStackTrace()
+                        withStyle(style = SpanStyle(color = Color.Green)) {
+                            append(e.message)
+                        }
+                    }
+                    return@label true
                 },
                 // \wは日本語とかにもマッチしてしまうので使えない
                 "^https?://[0-9A-Za-z_!?/+\\-_~;.,*&@#$%()'\\[\\]]+\\.(jpg|jpeg|png|webp)(\\?[0-9A-Za-z_!?/+\\-=_~;.,*&@#$%()'\\[\\]]+)?".toRegex() to label@{ value ->
@@ -373,6 +441,10 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onCl
                         uriHandler.openUri(it.item)
                         tapped = true
                     }
+                    annotated.getStringAnnotations(tag = "note", start = offset, end = offset).firstOrNull()?.let {
+                        noteReference = it.item
+                        tapped = true
+                    }
                     if (!tapped) {
                         expanded = true
                     }
@@ -451,6 +523,80 @@ fun EventView(post : Event, onGetProfileData : () -> Map<String, MetaData>, onCl
                 Text(name)
             }
             )
+        }
+        if (noteReference.isNotEmpty()) {
+            val onDismiss : () -> Unit = {
+                noteReference = ""
+            }
+            var event : Event? = null
+            if (noteReference.startsWith("nostr:note1")) {
+                val bech32str = noteReference.substring(6)
+                val (hrp, data) = NIP19.decode(bech32str)
+                val id = Hex.encode(data)
+                event = onGetEventMap()[id]?.firstOrNull()
+                if (event == null) {
+                    val filter = Filter(
+                        ids = listOf(id),
+                        kinds = listOf(Kind.Text.num),
+                        until = System.currentTimeMillis() / 1000
+                    )
+                    onEventNotFound(filter)
+                }
+            }
+            else {
+                val bech32str = noteReference.substring(6)
+                val (hrp, data) = NIP19.decode(bech32str)
+                val tlv = NIP19.parseTLV(data)
+                val id = Hex.encode(tlv[0]!![0])
+                val relays = tlv[1]?.map { String(it) } ?: mutableListOf<String>()
+                val author = tlv[2]?.get(0)?.let {
+                    Hex.encode(it)
+                } ?: ""
+                val kind = tlv[3]?.get(0)?.let {
+                    Hex.encode(it).toIntOrNull() ?: 16
+                } ?: -1
+                var list = onGetEventMap()[id] ?: mutableListOf()
+                if (author.isNotEmpty()) {
+                    list = list.filter { it.pubkey == author }
+                }
+                if (kind != -1) {
+                    list = list.filter { it.kind == kind }
+                }
+                event = list.firstOrNull()
+                if (event == null) {
+                    val filter = Filter(
+                        ids = listOf(id),
+                        authors = if (author.isEmpty()) { listOf() } else { listOf(author) },
+                        kinds = if (kind == -1) { listOf() } else { listOf(kind) },
+                        until = System.currentTimeMillis() / 1000
+                    )
+                    onEventNotFound(filter)
+                }
+            }
+            if (event == null) {
+                Dialog(onDismissRequest = onDismiss) {
+                    Card {
+                        Text(context.getString(R.string.loading), textAlign = TextAlign.Center)
+                    }
+                }
+            }
+            else {
+                Dialog(onDismissRequest = onDismiss) {
+                    Card {
+                        EventView(
+                            post = event,
+                            onGetEventMap = onGetEventMap,
+                            onGetProfileData = onGetProfileData,
+                            onClickImageURL = onClickImageURL,
+                            onUserNotFound = onUserNotFound,
+                            onEventNotFound = onEventNotFound,
+                            onReply = {},
+                            onHide = {},
+                            onMute = {}
+                        )
+                    }
+                }
+            }
         }
     }
 }
