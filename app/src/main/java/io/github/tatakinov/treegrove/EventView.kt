@@ -128,9 +128,11 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                 "^nostr:note1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
                     val bech32str = value.substring(6)
                     val (hrp, data) = NIP19.decode(bech32str)
-                    val note = String(data)
                     if (hrp != "note") {
                         Log.d("EventView", "invalid bech32.")
+                        return@label false
+                    } else if (data.size != 32) {
+                        Log.d("EventView", "invalid data.")
                         return@label false
                     } else {
                         pushStringAnnotation(tag = "note", annotation = value)
@@ -178,10 +180,10 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                     return@label true
                 },
                 // \wは日本語とかにもマッチしてしまうので使えない
-                "^https?://[0-9A-Za-z_!?/+\\-_~;.,*&@#$%()'\\[\\]]+\\.(jpg|jpeg|png|webp)(\\?[0-9A-Za-z_!?/+\\-=_~;.,*&@#$%()'\\[\\]]+)?".toRegex() to label@{ value ->
-                    val domain = "^https?://[0-9A-Za-z_!?+\\-_~;.,*&@#\\\\$%()'\\[\\]]+/".toRegex()
+                "^https?://[0-9A-Za-z_!?/+\\-~;.,*&@#$%()'\\[\\]]+\\.(jpg|jpeg|png|webp)(\\?[0-9A-Za-z_!?/+\\-=~;.,*&@#$%()'\\[\\]]+)?".toRegex() to label@{ value ->
+                    val domain = "^https?://[0-9A-Za-z_!?+\\-~;.,*&@#\\\\$%()'\\[\\]]+/".toRegex()
                         .find(value)?.value
-                    "^https?://[0-9A-Za-z_!?/+\\-_~;.,*&@#$%()'\\[\\]]+\\.(jpg|jpeg|png|bmp|webp)".toRegex()
+                    "^https?://[0-9A-Za-z_!?/+\\-~;.,*&@#$%()'\\[\\]]+\\.(jpg|jpeg|png|bmp|webp)".toRegex()
                         .find(value)?.let {
                             pushStringAnnotation(tag = "image", annotation = value)
                             withStyle(style = SpanStyle(color = Color.Cyan)) {
@@ -191,8 +193,8 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                         }
                     return@label true
                 },
-                "^https?://[0-9A-Za-z_!?/+\\-=_~;.,*&@#$%()'\\[\\]]+\\.(jpg|jpeg|png|webp)".toRegex() to label@{ value ->
-                    val domain = "^https?://[0-9A-Za-z_!?+\\-_~;.,*&@#\\\\$%()'\\[\\]]+/".toRegex()
+                "^https?://[0-9A-Za-z_!?/+\\-=~;.,*&@#$%()'\\[\\]]+\\.(jpg|jpeg|png|webp)".toRegex() to label@{ value ->
+                    val domain = "^https?://[0-9A-Za-z_!?+\\-~;.,*&@#\\\\$%()'\\[\\]]+/".toRegex()
                         .find(value)?.value
                     pushStringAnnotation(tag = "image", annotation = value)
                     withStyle(style = SpanStyle(color = Color.Cyan)) {
@@ -201,7 +203,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                     pop()
                     return@label true
                 },
-                "^https?://[0-9A-Za-z_!?/+\\-=_~;.,*&@#$%()'\\[\\]]+".toRegex() to label@{ value ->
+                "^https?://[0-9A-Za-z_!?/+\\-=~;.,*&@#$%()'\\[\\]]+".toRegex() to label@{ value ->
                     pushStringAnnotation(tag = "url", annotation = value)
                     withStyle(style = SpanStyle(color = Color.Cyan)) {
                         append(value)
@@ -383,7 +385,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                 val (hrp, data) = NIP19.decode(bech32str)
                 val tlv = NIP19.parseTLV(data)
                 val id = Hex.encode(tlv[0]!![0])
-                val relays = tlv[1]?.map { String(it) } ?: mutableListOf<String>()
+                val relays = tlv[1]?.map { String(it) } ?: mutableListOf()
                 val author = tlv[2]?.get(0)?.let {
                     Hex.encode(it)
                 } ?: ""
@@ -416,7 +418,6 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                 }
             }
             else if (event.kind == Kind.ChannelCreation.num) {
-                // MetaDataはeventが存在しているならあるはずなので!!を使っていい
                 AlertDialog(onDismissRequest = { onDismiss() }, dismissButton = {
                     TextButton(onClick = {
                         onDismiss()
@@ -432,6 +433,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                 }, title = {
                     Text(context.getString(R.string.move_channel_title))
                 }, text = {
+                    // MetaDataはeventが存在しているならあるはずなので!!を使っていい
                     val n = onGetChannelMetaData()[event.id]!!.name
                     Text(context.getString(R.string.description_move_channel).format(n))
                 })

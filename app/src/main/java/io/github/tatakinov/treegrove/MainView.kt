@@ -314,6 +314,12 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 event.id    = Event.generateHash(event, true)
                                 event.sig   = Event.sign(event, Config.config.privateKey)
                                 networkViewModel.send(event)
+                                val filter = Filter(
+                                    kinds = listOf(Kind.Metadata.num),
+                                    authors = listOf(Config.config.getPublicKey()),
+                                    limit = 1,
+                                )
+                                networkViewModel.send(filter)
                             }
                             doChangeProfile = false
                         }, onCancel = {
