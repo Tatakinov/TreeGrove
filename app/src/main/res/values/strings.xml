@@ -50,4 +50,6 @@
     <string name="search">Search</string>
     <string name="relay_connection_status">Relay connection status</string>
     <string name="ng" translatable="false">NG</string>
+    <string name="move_channel_title">Move channel</string>
+    <string name="description_move_channel">Move to %s</string>
 </resources>

@@ -40,4 +40,6 @@
     <string name="description_swipe_to_open_menu">スワイプしてメニューを開く</string>
     <string name="search">検索</string>
     <string name="relay_connection_status">リレーの接続状況</string>
+    <string name="move_channel_title">チャンネルの移動</string>
+    <string name="description_move_channel">%sへ移動しますか？</string>
 </resources>

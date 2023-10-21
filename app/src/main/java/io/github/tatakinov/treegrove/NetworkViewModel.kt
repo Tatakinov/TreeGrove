@@ -1,7 +1,6 @@
 package io.github.tatakinov.treegrove
 
 import android.graphics.BitmapFactory
-import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -42,9 +41,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     private val _postDataListInternal = mutableMapOf<String, MutableMap<String, MutableList<EventData>>>("" to mutableMapOf())
     private val _postDataList = MutableLiveData<List<EventData>>(listOf())
     val postDataList : LiveData<List<EventData>> get() = _postDataList
-    private val _postMetaDataInternal = mutableMapOf<String, MetaData>()
-    private val _postMetaData = MutableLiveData<Map<String, MetaData>>(mapOf())
-    val postMetaData : LiveData<Map<String, MetaData>> get() = _postMetaData
+    private val _userMetaDataInternal = mutableMapOf<String, MetaData>()
+    private val _userMetaData = MutableLiveData<Map<String, MetaData>>(mapOf())
+    val userMetaData : LiveData<Map<String, MetaData>> get() = _userMetaData
     private var _transmittedDataSizeInternal = 0
     private val _transmittedDataSize = MutableLiveData<Int>(0)
     val transmittedDataSize : LiveData<Int> get() = _transmittedDataSize
@@ -109,7 +108,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                         }
                                     }
                                     val userMap = mutableMapOf<String, MetaData>().apply {
-                                        for ((k, v) in _postMetaDataInternal) {
+                                        for ((k, v) in _userMetaDataInternal) {
                                             put(k, v.copy())
                                         }
                                     }
@@ -121,7 +120,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     _channelList.postValue(channelList)
                                     _postDataList.postValue(postDataList)
                                     _channelMetaData.postValue(channelMap)
-                                    _postMetaData.postValue(userMap)
+                                    _userMetaData.postValue(userMap)
                                     _eventMap.postValue(map)
                                     if (channelMetaDataIdList.isNotEmpty()) {
                                         val l = channelMetaDataIdList.distinct()
@@ -193,7 +192,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                         }
                                     }
                                     val userMap = mutableMapOf<String, MetaData>().apply {
-                                        for ((k, v) in _postMetaDataInternal) {
+                                        for ((k, v) in _userMetaDataInternal) {
                                             put(k, v.copy())
                                         }
                                     }
@@ -205,7 +204,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     _channelList.postValue(channelList)
                                     _postDataList.postValue(postDataList)
                                     _channelMetaData.postValue(channelMap)
-                                    _postMetaData.postValue(userMap)
+                                    _userMetaData.postValue(userMap)
                                     _eventMap.postValue(map)
                                     if (channelMetaDataIdList.isNotEmpty()) {
                                         val l = channelMetaDataIdList.distinct()
@@ -343,7 +342,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     val about = json.optString(MetaData.ABOUT, "")
                     val picture = json.optString(MetaData.PICTURE, "")
                     val nip05 = json.optString(MetaData.NIP05, "")
-                    val map = _postMetaDataInternal
+                    val map = _userMetaDataInternal
                     if (map.contains(event.pubkey)) {
                         if (map[event.pubkey]!!.createdAt < event.createdAt) {
                             map[event.pubkey] =
@@ -356,7 +355,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     }
                     // fetch image
                     if (picture.isNotEmpty()) {
-                        fetchProfileImage(picture, dest = _postMetaData, internal = map, pubkey = event.pubkey)
+                        fetchProfileImage(picture, dest = _userMetaData, internal = map, pubkey = event.pubkey)
                     }
                     if (nip05.isNotEmpty()) {
                         fetchProfileIdentify(nip05, event.pubkey)
@@ -480,7 +479,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 if (map.none { m -> m.key == event.id &&
                             m.value.any { it.event == event } &&
                             m.value.first { it.event == event }.from.contains(relay.url) }) {
-                    if (!_postMetaDataInternal.contains(event.pubkey)) {
+                    if (!_userMetaDataInternal.contains(event.pubkey)) {
                         userMetaDataIdList.add(event.pubkey)
                     }
                     if (map.contains(event.id) &&
@@ -666,7 +665,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         viewModelScope.launch(Dispatchers.Default) {
             lateinit var list : List<String>
             _mutex.withLock {
-                list = pubkeyList.filterNot { _postMetaDataInternal.contains(it) }
+                list = pubkeyList.filterNot { _userMetaDataInternal.contains(it) }
             }
             if (list.isNotEmpty()) {
                 val filter = Filter(
@@ -686,17 +685,17 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             lateinit var list : List<String>
             _mutex.withLock {
                 pubkeyList.filter {
-                    _postMetaDataInternal.contains(it)
+                    _userMetaDataInternal.contains(it)
                 }.forEach {
-                    val data = _postMetaDataInternal[it]!!
+                    val data = _userMetaDataInternal[it]!!
                     if (data.pictureUrl.isNotEmpty() && data.image.status == DataStatus.NotLoading) {
-                        fetchProfileImage(data.pictureUrl, dest = _postMetaData, internal = _postMetaDataInternal, pubkey = it)
+                        fetchProfileImage(data.pictureUrl, dest = _userMetaData, internal = _userMetaDataInternal, pubkey = it)
                     }
                     if (data.nip05Address.isNotEmpty() && data.nip05.status == DataStatus.NotLoading) {
                         fetchProfileIdentify(data.nip05Address, pubkey = it)
                     }
                 }
-                list = pubkeyList.filterNot { _postMetaDataInternal.contains(it) }
+                list = pubkeyList.filterNot { _userMetaDataInternal.contains(it) }
             }
             for (relay in _relays) {
                 fetchUserProfile(list, relay)
@@ -774,9 +773,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                         fetchProfileImage(v.pictureUrl, _channelMetaData, _channelMetaDataInternal, k)
                     }
                 }
-                for ((k, v) in _postMetaDataInternal) {
+                for ((k, v) in _userMetaDataInternal) {
                     if (v.pictureUrl.isNotEmpty()) {
-                        fetchProfileImage(v.pictureUrl, _postMetaData, _postMetaDataInternal, k)
+                        fetchProfileImage(v.pictureUrl, _userMetaData, _userMetaDataInternal, k)
                     }
                 }
             }
@@ -843,8 +842,8 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         val domain = match.groups[2]!!.value
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                val internal = _postMetaDataInternal
-                val dest = _postMetaData
+                val internal = _userMetaDataInternal
+                val dest = _userMetaData
                 if (internal[pubkey]!!.nip05.status != DataStatus.NotLoading) {
                     return@withLock
                 }

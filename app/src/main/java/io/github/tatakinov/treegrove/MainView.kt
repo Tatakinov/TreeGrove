@@ -66,8 +66,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val postListState = rememberLazyListState()
     val postDataList = networkViewModel.postDataList.observeAsState()
     val eventMap = networkViewModel.eventMap.observeAsState()
-    val channelProfileData = networkViewModel.channelMetaData.observeAsState()
-    val postProfileData = networkViewModel.postMetaData.observeAsState()
+    val channelMetaData = networkViewModel.channelMetaData.observeAsState()
+    val userMetaData = networkViewModel.userMetaData.observeAsState()
     val context = LocalContext.current
     val transmittedDataSize = networkViewModel.transmittedDataSize.observeAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -153,7 +153,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     }
                     else {
                         channelDataList.value!!.filter {
-                            val profileData = channelProfileData.value!![it.event.id]!!
+                            val profileData = channelMetaData.value!![it.event.id]!!
                             profileData.name.contains(searchChannel.toRegex())
                         }
                     }
@@ -198,8 +198,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             Divider()
                         }
                         items(items = list, key = { it.event.toJSONObject().toString() }) {
-                            if (channelProfileData.value!!.contains(it.event.id)) {
-                                val profileData = channelProfileData.value!![it.event.id]!!
+                            if (channelMetaData.value!!.contains(it.event.id)) {
+                                val profileData = channelMetaData.value!![it.event.id]!!
                                 NavigationDrawerItem(
                                     icon = {
                                         if (Config.config.displayProfilePicture) {
@@ -288,8 +288,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     var about = ""
                     var picture = ""
                     var nip05 = ""
-                    if (postProfileData.value!!.contains(Config.config.getPublicKey())) {
-                        val data = postProfileData.value!![Config.config.getPublicKey()]!!
+                    if (userMetaData.value!!.contains(Config.config.getPublicKey())) {
+                        val data = userMetaData.value!![Config.config.getPublicKey()]!!
                         name = data.name
                         about = data.about
                         picture = data.pictureUrl
@@ -340,8 +340,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 })
                         var channelImage: ImageBitmap? = null
                         var channelName = ""
-                        if (channelProfileData.value!!.contains(channelId.value!!)) {
-                            val data = channelProfileData.value!![channelId.value!!]!!
+                        if (channelMetaData.value!!.contains(channelId.value!!)) {
+                            val data = channelMetaData.value!![channelId.value!!]!!
                             if (data.name.isNotEmpty()) {
                                 channelName = data.name
                                 if (channelName.length > 16) {
@@ -425,7 +425,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             onGetPostDataList = { postDataList.value!! },
                             onGetEventMap = { eventMap.value!! },
                             onGetLazyListState = { postListState },
-                            onGetProfileData = { postProfileData.value!! },
+                            onGetChannelMetaData = { channelMetaData.value!! },
+                            onGetUserMetaData = { userMetaData.value!! },
                             onGetChannelId = { channelId.value!! },
                             onClickImageURL = { url ->
                                 scope.launch(Dispatchers.Default) {
@@ -477,6 +478,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 )
                                 scope.launch(Dispatchers.Default) {
                                     networkViewModel.send(e)
+                                }
+                            }, onMoveChannel = { id ->
+                                scope.launch(Dispatchers.Default) {
+                                    networkViewModel.setChannel(id)
                                 }
                             }
                         )

@@ -8,16 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -26,11 +21,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,182 +47,24 @@ import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.NIP19
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 
 
 @Composable
-fun EventListView(onGetPostDataList : () -> List<EventData>,
-                  onGetEventMap : () -> Map<String, Set<Event>>,
-                  onGetLazyListState : () -> LazyListState,
-                  onGetProfileData: () -> Map<String, MetaData>,
-                  onGetChannelId : () -> String,
-                  onClickImageURL : (String) -> Unit, modifier: Modifier, onRefresh : () -> Unit,
-                  onUserNotFound: (String) -> Unit, onEventNotFound: (Filter) -> Unit,
-                  onPost : (Event) -> Unit,
-                  onHide: (Event) -> Unit, onMute: (Event) -> Unit) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var doPost by remember {
-        mutableStateOf(false)
-    }
-    var doConfirmPost by remember {
-        mutableStateOf(false)
-    }
-    var postMessage by remember { mutableStateOf("") }
-    var replyEvent : Event? by remember {
-        mutableStateOf(null)
-    }
-    LazyColumn(state = onGetLazyListState(), modifier = modifier) {
-        items(items = onGetPostDataList(), key = { it.event.toJSONObject().toString() }) { event ->
-            EventView(event.event, onGetEventMap = onGetEventMap, onGetProfileData,
-                onClickImageURL = onClickImageURL,
-                onUserNotFound = onUserNotFound,
-                onEventNotFound = onEventNotFound,
-                onReply = {e ->
-                    replyEvent = e
-                    doPost = true
-                }, onHide = onHide, onMute = onMute
-            )
-        }
-        item {
-            Button(onClick = { onRefresh() }, content = {
-                Text(context.getString(R.string.load_more), textAlign = TextAlign.Center)
-            }, modifier = Modifier.fillMaxWidth())
-        }
-    }
-    if (doPost) {
-        PostView(
-            onGetReplyEvent = {
-                if (replyEvent == null) {
-                    return@PostView null
-                }
-                var name = NIP19.encode("npub", Hex.decode(replyEvent!!.pubkey)).take(16) + "..."
-                val postProfileData = onGetProfileData()
-                if (postProfileData.contains(replyEvent!!.pubkey)) {
-                    val data    = postProfileData[replyEvent!!.pubkey]!!
-                    if (data.name.isNotEmpty()) {
-                        name    = data.name
-                        if (name.length > 16) {
-                            name    = name.take(16) + "..."
-                        }
-                    }
-                }
-                return@PostView name
-            },
-            onSubmit = { message ->
-                postMessage = message
-                doPost = false
-            },
-            onCancel = {
-                doPost = false
-            }
-        )
-    } else {
-        ActionView(
-            modifier = Modifier.height(Const.ICON_SIZE),
-            onClickGoToTop = {
-                scope.launch(Dispatchers.Main) {
-                    onGetLazyListState().scrollToItem(0)
-                }
-            },
-            onClickGoToBottom = {
-                scope.launch(Dispatchers.Main) {
-                    onGetLazyListState().scrollToItem(onGetLazyListState().layoutInfo.totalItemsCount)
-                }
-            },
-            onClickOpenPostView = {
-                if (Config.config.privateKey.isEmpty()) {
-                    Toast.makeText(
-                        context,
-                        context.getString(R.string.error_set_private_key),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } else {
-                    doPost = true
-                }
-            })
-    }
-    if (postMessage.isNotEmpty()) {
-        AlertDialog(onDismissRequest = {
-            replyEvent  = null
-            postMessage = ""
-            doConfirmPost = false
-        }, confirmButton = {
-            TextButton(onClick = {
-                val tags =
-                    mutableListOf(
-                        listOf(
-                            "e",
-                            onGetChannelId(),
-                            "",
-                            "root"
-                        )
-                    )
-                if (replyEvent != null) {
-                    tags.add(listOf("e", replyEvent!!.id, "", "reply"))
-                    tags.addAll(replyEvent!!.tags.filter {
-                        if (it.size >= 2 && it[0] == "p") {
-                            return@filter true
-                        }
-                        return@filter false
-                    })
-                    if (!tags.any {
-                            it.size >= 2 && it[0] == "p" && it[1] == replyEvent!!.pubkey
-                        }) {
-                        tags.add(listOf("p", replyEvent!!.pubkey))
-                    }
-                }
-                val event = Event(
-                    kind = Kind.ChannelMessage.num,
-                    content = postMessage,
-                    createdAt = System.currentTimeMillis() / 1000,
-                    pubkey = Config.config.getPublicKey(),
-                    tags = tags
-                )
-                event.id = Event.generateHash(event, true)
-                event.sig = Event.sign(event, Config.config.privateKey)
-                onPost(event)
-                postMessage = ""
-                replyEvent  = null
-                doConfirmPost = false
-            }) {
-                Text(context.getString(R.string.ok))
-            }
-        }, dismissButton = {
-            TextButton(onClick = {
-                replyEvent  = null
-                postMessage = ""
-                doConfirmPost = false
-            }) {
-                Text(context.getString(R.string.cancel))
-            }
-        }, title = {
-            Text(context.getString(R.string.confirm_title))
-        }, text = {
-            Text(context.getString(R.string.confirm_text).format(postMessage))
-        })
-    }
-    LaunchedEffect(onGetChannelId()) {
-        replyEvent  = null
-        doPost = false
-    }
-}
-
-@Composable
 fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
-              onGetProfileData : () -> Map<String, MetaData>, onClickImageURL : (String) -> Unit,
+              onGetChannelMetaData : () -> Map<String, MetaData>,
+              onGetUserMetaData : () -> Map<String, MetaData>, onClickImageURL : (String) -> Unit,
               onUserNotFound : (String) -> Unit, onEventNotFound : (Filter) -> Unit,
-              onReply: (Event) -> Unit, onHide : (Event) -> Unit, onMute : (Event) -> Unit) {
+              onReply: (Event) -> Unit, onHide : (Event) -> Unit, onMute : (Event) -> Unit,
+              onMoveChannel : (String) -> Unit) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     var name = NIP19.encode("npub", Hex.decode(post.pubkey)).take(16) + "..."
     var url = ""
     var image : ImageBitmap? = null
     var identify = false
-    val postProfileData = onGetProfileData()
+    val postProfileData = onGetUserMetaData()
     var doHideMessage by remember {
         mutableStateOf(false)
     }
@@ -543,7 +378,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                     onEventNotFound(filter)
                 }
             }
-            else {
+            else if (noteReference.startsWith("nostr:nevent1")) {
                 val bech32str = noteReference.substring(6)
                 val (hrp, data) = NIP19.decode(bech32str)
                 val tlv = NIP19.parseTLV(data)
@@ -580,19 +415,42 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                     }
                 }
             }
+            else if (event.kind == Kind.ChannelCreation.num) {
+                // MetaDataはeventが存在しているならあるはずなので!!を使っていい
+                AlertDialog(onDismissRequest = { onDismiss() }, dismissButton = {
+                    TextButton(onClick = {
+                        onDismiss()
+                    }) {
+                        Text(context.getString(R.string.cancel))
+                    }
+                }, confirmButton = {
+                    TextButton(onClick = {
+                        onMoveChannel(event.id)
+                    }) {
+                        Text(context.getString(R.string.ok))
+                    }
+                }, title = {
+                    Text(context.getString(R.string.move_channel_title))
+                }, text = {
+                    val n = onGetChannelMetaData()[event.id]!!.name
+                    Text(context.getString(R.string.description_move_channel).format(n))
+                })
+            }
             else {
                 Dialog(onDismissRequest = onDismiss) {
                     Card {
                         EventView(
                             post = event,
                             onGetEventMap = onGetEventMap,
-                            onGetProfileData = onGetProfileData,
+                            onGetChannelMetaData = onGetChannelMetaData,
+                            onGetUserMetaData = onGetUserMetaData,
                             onClickImageURL = onClickImageURL,
                             onUserNotFound = onUserNotFound,
                             onEventNotFound = onEventNotFound,
                             onReply = {},
                             onHide = {},
-                            onMute = {}
+                            onMute = {},
+                            onMoveChannel = onMoveChannel
                         )
                     }
                 }
