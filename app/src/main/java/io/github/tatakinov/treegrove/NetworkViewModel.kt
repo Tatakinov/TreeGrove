@@ -503,13 +503,19 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 }
             }
 
-            else -> {
+            Kind.Text.num -> {
                 if (!_eventMapInternal.contains(event.id)) {
                     _eventMapInternal[event.id] = mutableSetOf(event)
                 }
                 else if (!_eventMapInternal[event.id]!!.contains(event)) {
                     _eventMapInternal[event.id]!!.add(event)
                 }
+                if (!_userMetaDataInternal.contains(event.pubkey)) {
+                    userMetaDataIdList.add(event.pubkey)
+                }
+            }
+
+            else -> {
             }
         }
     }
