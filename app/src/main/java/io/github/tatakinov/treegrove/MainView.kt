@@ -54,6 +54,7 @@ import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,7 +72,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val context = LocalContext.current
     val transmittedDataSize = networkViewModel.transmittedDataSize.observeAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    val imageURL = remember { mutableStateOf("") }
+    var imageURL by remember { mutableStateOf("") }
     val image = networkViewModel.image.observeAsState()
     var expandedChannelAbout by remember {
         mutableStateOf(false)
@@ -91,8 +92,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     Row {
                         Button(onClick = {
                             scope.launch(Dispatchers.Main) {
-                                drawerState.close()
                                 manager.clearFocus()
+                                drawerState.close()
                             }
                             onNavigate()
                         }, content = {
@@ -437,8 +438,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             onClickImageURL = { url ->
                                 scope.launch(Dispatchers.Default) {
                                     networkViewModel.fetchImage(url)
+                                    withContext(Dispatchers.Main) {
+                                        imageURL = url
+                                    }
                                 }
-                                imageURL.value = url
                             },
                             modifier = Modifier
                                 .weight(1f),
@@ -501,9 +504,9 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                 )
             }
         }
-        if (imageURL.value.isNotEmpty()) {
+        if (imageURL.isNotEmpty()) {
             val onDismissRequest : () -> Unit = {
-                imageURL.value  = ""
+                imageURL = ""
             }
             Dialog(onDismissRequest = {
                 onDismissRequest()
@@ -520,7 +523,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             val data = image.value!!.data!!
                             val imageBitmap =
                                 BitmapFactory.decodeByteArray(data, 0, data.size).asImageBitmap()
-                            Image(imageBitmap, imageURL.value, modifier = Modifier.align(
+                            Image(imageBitmap, imageURL, modifier = Modifier.align(
                                 Alignment.Center))
                         }
                     }
@@ -528,10 +531,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
             }
         }
     }
-    LaunchedEffect(imageURL.value) {
-        if (imageURL.value.isNotEmpty()) {
+    LaunchedEffect(imageURL) {
+        if (imageURL.isNotEmpty()) {
             scope.launch(Dispatchers.Default) {
-                networkViewModel.fetchImage(imageURL.value)
+                networkViewModel.fetchImage(imageURL)
             }
         }
     }
