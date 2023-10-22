@@ -26,3 +26,8 @@ Please consider using the following apps and websites before using this app.
 
 - [icon](https://fonts.google.com/icons)
 
+- [secp256k1-kmp](https://github.com/ACINQ/secp256k1-kmp)
+
+- [okhttp](https://github.com/square/okhttp)
+
+- [jackson-databind](https://github.com/FasterXML/jackson-databind)
