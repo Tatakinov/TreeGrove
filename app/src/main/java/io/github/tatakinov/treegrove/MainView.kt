@@ -21,6 +21,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
@@ -81,6 +83,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val manager = LocalFocusManager.current
     var showRelayConnectionStatus by remember { mutableStateOf(false) }
     val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
+    val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
 
     Box(modifier = Modifier.fillMaxSize()) {
         ModalNavigationDrawer(
@@ -191,6 +194,58 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             }
                         }
                         item {
+                            Text(context.getString(R.string.pinned_channel), textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 10.dp, bottom = 10.dp))
+                        }
+                        item {
+                            Divider()
+                        }
+                        items(items = pinnedChannelList.value!!, key = { it }) {
+                            var expanded by remember { mutableStateOf(false) }
+                            val metaData = if (channelMetaData.value!!.contains(it)) {
+                                channelMetaData.value!![it]!!
+                            }
+                            else {
+                                MetaData(0, it)
+                            }
+                            Box {
+                                DrawerMenuItem(metaData = metaData, onClick = {
+                                    scope.launch(Dispatchers.Main) {
+                                        manager.clearFocus()
+                                        drawerState.close()
+                                        networkViewModel.setChannel(it)
+                                    }
+                                }, onLongPress = {
+                                    expanded = true
+                                })
+                                DropdownMenu(expanded = expanded, onDismissRequest = {
+                                    expanded = false
+                                }) {
+                                    DropdownMenuItem(text = {
+                                        Text(context.getString(R.string.unpinned))
+                                    }, onClick = {
+                                        if (Config.config.privateKey.isEmpty()) {
+                                            Toast.makeText(
+                                                context,
+                                                context.getString(R.string.error_set_private_key),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        } else {
+                                            scope.launch(Dispatchers.Default) {
+                                                expanded = false
+                                                networkViewModel.unpinnedChannel(it)
+                                            }
+                                        }
+                                    })
+                                }
+                            }
+                        }
+                        item {
+                            Divider()
+                        }
+                        item {
                             Text(context.getString(R.string.list_of_channel), textAlign = TextAlign.Center, modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 10.dp, bottom = 10.dp))
@@ -200,41 +255,36 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         }
                         items(items = list, key = { it.event.toJSONObject().toString() }) {
                             if (channelMetaData.value!!.contains(it.event.id)) {
-                                val profileData = channelMetaData.value!![it.event.id]!!
-                                NavigationDrawerItem(
-                                    icon = {
-                                        if (Config.config.displayProfilePicture) {
-                                            if (profileData.image.status != DataStatus.Valid) {
-                                                Image(
-                                                    painterResource(id = R.drawable.no_image),
-                                                    contentDescription = "no image",
-                                                    modifier = Modifier
-                                                        .width(Const.ACTION_ICON_SIZE)
-                                                        .height(Const.ACTION_ICON_SIZE)
-                                                )
-                                            } else {
-                                                Image(
-                                                    profileData.image.data!!,
-                                                    contentDescription = profileData.name,
-                                                    modifier = Modifier
-                                                        .width(Const.ACTION_ICON_SIZE)
-                                                        .height(Const.ACTION_ICON_SIZE)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    label = {
-                                        Text(profileData.name, modifier = Modifier.padding(start = 10.dp), maxLines = 2, overflow = TextOverflow.Clip)
-                                    },
-                                    selected = false,
-                                    onClick = {
+                                var expanded by remember { mutableStateOf(false) }
+                                val metaData = channelMetaData.value!![it.event.id]!!
+                                Box {
+                                    DrawerMenuItem(metaData = metaData, onClick = {
                                         scope.launch(Dispatchers.Main) {
                                             manager.clearFocus()
                                             drawerState.close()
                                             networkViewModel.setChannel(it.event.id)
                                         }
+                                    }, onLongPress = {
+                                        expanded = true
+                                    })
+                                    DropdownMenu(expanded = expanded, onDismissRequest = {
+                                        expanded = false
+                                    }) {
+                                        DropdownMenuItem(text = {
+                                            Text(context.getString(R.string.pinned))
+                                        }, onClick = {
+                                            if (Config.config.privateKey.isEmpty()) {
+                                                Toast.makeText(context, context.getString(R.string.error_set_private_key), Toast.LENGTH_SHORT).show()
+                                            }
+                                            else {
+                                                scope.launch(Dispatchers.Default) {
+                                                    expanded = false
+                                                    networkViewModel.pinnedChannel(it.event.id)
+                                                }
+                                            }
+                                        })
                                     }
-                                )
+                                }
                             }
                         }
                         item {

@@ -52,4 +52,7 @@
     <string name="ng" translatable="false">NG</string>
     <string name="move_channel_title">Move channel</string>
     <string name="description_move_channel">Move to %s</string>
+    <string name="pinned_channel">Pinned channel</string>
+    <string name="unpinned">Unpinned</string>
+    <string name="pinned">Pinned</string>
 </resources>

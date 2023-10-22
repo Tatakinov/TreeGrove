@@ -42,4 +42,7 @@
     <string name="relay_connection_status">リレーの接続状況</string>
     <string name="move_channel_title">チャンネルの移動</string>
     <string name="description_move_channel">%sへ移動しますか？</string>
+    <string name="pinned_channel">ピンされたチャンネル</string>
+    <string name="unpinned">ピンを外す</string>
+    <string name="pinned">ピンする</string>
 </resources>

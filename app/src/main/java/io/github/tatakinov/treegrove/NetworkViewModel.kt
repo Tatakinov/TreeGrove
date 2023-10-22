@@ -50,6 +50,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     private val _imageDataMap = mutableMapOf<String, LoadingDataStatus<ByteArray>>()
     private var _image = MutableLiveData<LoadingDataStatus<ByteArray>>()
     val image : LiveData<LoadingDataStatus<ByteArray>> get() = _image
+    private var _pinnedChannelListInternal = mutableListOf<String>()
+    private val _pinnedChannelList = MutableLiveData<List<String>>(listOf())
+    val pinnedChannelList : LiveData<List<String>> get() = _pinnedChannelList
 
     private var _state : NetworkState = NetworkState.Other
     private val _relayConnectionStatusInternal = mutableMapOf<String, Boolean>()
@@ -301,8 +304,10 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
     private suspend fun sendInInitialize(relay : Relay) = withContext(Dispatchers.IO) {
         relay.closeAllFilter()
-        val filter = Filter(kinds = listOf(Kind.ChannelCreation.num), limit = Config.config.fetchSize)
-        relay.send(filter)
+        relay.send(Filter(kinds = listOf(Kind.ChannelCreation.num), limit = Config.config.fetchSize))
+        if (Config.config.privateKey.isNotEmpty()) {
+            relay.send(Filter(kinds = listOf(Kind.PinList.num), authors = listOf(Config.config.getPublicKey()), limit = 1))
+        }
         val list = mutableListOf<EventData>().apply {
             for ((_, v) in _postDataListInternal[channelId.value!!]!!) {
                 addAll(v.filter { it.from.contains(relay.url) })
@@ -515,6 +520,16 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 }
             }
 
+            Kind.PinList.num -> {
+                val list = event.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                _pinnedChannelListInternal  = mutableListOf<String>().apply { addAll(list) }
+                _pinnedChannelList.postValue(_pinnedChannelListInternal)
+                val l = list.filterNot { _channelMetaDataInternal.contains(it) }
+                if (l.isNotEmpty()) {
+                    send(Filter(ids = l, kinds = listOf(Kind.ChannelCreation.num), limit = l.size.toLong(), until = System.currentTimeMillis() / 1000))
+                }
+            }
+
             else -> {
             }
         }
@@ -571,8 +586,8 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }
 
-    suspend fun send(event : Event)    = withContext(Dispatchers.IO) {
-        viewModelScope.launch(Dispatchers.Default) {
+    suspend fun send(event : Event)    = withContext(Dispatchers.Default) {
+        viewModelScope.launch(Dispatchers.IO) {
             _mutex.withLock() {
                 for (relay in _relays) {
                     relay.send(event)
@@ -909,5 +924,29 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             return false
         }
         return true
+    }
+
+    private suspend fun refreshPinnedChannel() = withContext(Dispatchers.Default) {
+        val event = Event(Kind.PinList.num, "", System.currentTimeMillis() / 1000, Config.config.getPublicKey(),
+            tags = _pinnedChannelListInternal.map { listOf("e", it) })
+        event.id = Event.generateHash(event, true)
+        event.sig = Event.sign(event, Config.config.privateKey)
+        send(event)
+        send(Filter(kinds = listOf(Kind.PinList.num), authors = listOf(Config.config.getPublicKey()), limit = 1))
+    }
+
+    suspend fun unpinnedChannel(id : String) = withContext(Dispatchers.Default) {
+        if (!_pinnedChannelListInternal.remove(id)) {
+            return@withContext
+        }
+        refreshPinnedChannel()
+    }
+
+    suspend fun pinnedChannel(id : String) = withContext(Dispatchers.Default) {
+        if (_pinnedChannelListInternal.contains(id)) {
+            return@withContext
+        }
+        _pinnedChannelListInternal.add(id)
+        refreshPinnedChannel()
     }
 }
