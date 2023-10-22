@@ -9,7 +9,7 @@ interface OnRelayListener {
     fun onEvent(relay: Relay, event : Event)
     fun onSuccessToPost(relay: Relay, event : Event, reason : String)
     fun onFailureToPost(relay : Relay, event : Event, reason : String)
-    fun onEOSE(relay: Relay, filter : Filter, events : List<Event>) : Boolean
+    fun onEOSE(relay: Relay, filterList : List<Filter>, events : List<Event>) : Boolean
     fun onFailure(relay: Relay, t : Throwable, res : Response?)
     fun onTransmit(relay : Relay, dataSize : Int)
     fun onClose(relay : Relay, code : Int, reason : String)

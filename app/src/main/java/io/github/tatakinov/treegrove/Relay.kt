@@ -72,7 +72,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
                                 val info = _filterQueue[subscriptionId]!!
                                 if (_listener.onEOSE(
                                         this@Relay,
-                                        info.filter,
+                                        info.filterList,
                                         _postBuffer[subscriptionId]!!
                                     )
                                 ) {
@@ -100,7 +100,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
                                     }
                                 }
                                 if (key.isNotEmpty() && value != null) {
-                                    send(value!!.filter, key)
+                                    send(value!!.filterList, key)
                                 }
                             }
                         }
@@ -160,7 +160,7 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
         }
     }
 
-    private fun send(filter: Filter, id : String) {
+    private fun send(filterList: List<Filter>, id : String) {
         if (!_config.read) {
             return
         }
@@ -170,11 +170,13 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
         val request = JSONArray()
         request.put("REQ")
         request.put(id)
-        request.put(filter.toJSONObject())
+        for (filter in filterList) {
+            request.put(filter.toJSONObject())
+        }
         send(request.toString())
     }
 
-    fun send(filter : Filter) : String {
+    fun send(filterList : List<Filter>) {
         var id: String
         do {
             val bytes = ByteArray(10)
@@ -185,16 +187,19 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
         reentrantLock.withLock {
             canConnect = _filterQueue.none { it.value.status == ConnectionStatus.Connecting }
             _filterQueue[id] = if (canConnect) {
-                ConnectionInfo(filter, ConnectionStatus.Connecting)
+                ConnectionInfo(filterList, ConnectionStatus.Connecting)
             }
             else {
-                ConnectionInfo(filter, ConnectionStatus.Wait)
+                ConnectionInfo(filterList, ConnectionStatus.Wait)
             }
         }
         if (canConnect) {
-            send(filter, id)
+            send(filterList, id)
         }
-        return id
+    }
+
+    fun send(filter : Filter) {
+        send(listOf(filter))
     }
 
     fun send(event : Event) {
@@ -217,21 +222,11 @@ class Relay (private val _config : ConfigRelayData, private val _listener : OnRe
         send(array.toString())
     }
 
-    fun close(filter : Filter) {
-        reentrantLock.withLock {
-            for ((k, v) in _filterQueue) {
-                if (filter == v.filter && v.status != ConnectionStatus.Wait) {
-                    close(k)
-                }
-            }
-        }
-    }
-
     fun closePostFilter() {
         val list = mutableListOf<String>()
         reentrantLock.withLock {
             for ((k, v) in _filterQueue) {
-                if (v.filter.kinds.contains(Kind.ChannelMessage.num)) {
+                if (v.filterList.any { it.kinds.contains(Kind.ChannelMessage.num) }) {
                     list.add((k))
                 }
             }

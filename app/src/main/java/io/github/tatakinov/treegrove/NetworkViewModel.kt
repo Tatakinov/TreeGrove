@@ -1,6 +1,7 @@
 package io.github.tatakinov.treegrove
 
 import android.graphics.BitmapFactory
+import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -166,7 +167,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
                         override fun onEOSE(
                             relay: Relay,
-                            filter: Filter,
+                            filterList: List<Filter>,
                             events: List<Event>
                         ): Boolean {
                             viewModelScope.launch(Dispatchers.Default) {
@@ -225,9 +226,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     }
                                 }
                             }
-                            if (filter.until > 0 || !(filter.kinds.contains(Kind.ChannelCreation.num) ||
-                                        filter.kinds.contains(Kind.ChannelMessage.num))
-                            ) {
+                            if (filterList.any { it.until > 0 }) {
                                 return true
                             }
                             return false
@@ -304,9 +303,27 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
     private suspend fun sendInInitialize(relay : Relay) = withContext(Dispatchers.IO) {
         relay.closeAllFilter()
-        relay.send(Filter(kinds = listOf(Kind.ChannelCreation.num), limit = Config.config.fetchSize))
-        if (Config.config.privateKey.isNotEmpty()) {
-            relay.send(Filter(kinds = listOf(Kind.PinList.num), authors = listOf(Config.config.getPublicKey()), limit = 1))
+        if (Config.config.privateKey.isEmpty()) {
+            relay.send(
+                Filter(
+                    kinds = listOf(Kind.ChannelCreation.num),
+                    limit = Config.config.fetchSize
+                )
+            )
+        }
+        else {
+            relay.send(
+                listOf(
+                    Filter(
+                        kinds = listOf(Kind.ChannelCreation.num),
+                        limit = Config.config.fetchSize
+                    ),
+                    Filter(kinds = listOf(Kind.PinList.num),
+                        authors = listOf(Config.config.getPublicKey()), limit = 1),
+                    Filter(kinds = listOf(Kind.Metadata.num),
+                        authors = listOf(Config.config.getPublicKey()), limit = 1)
+                )
+            )
         }
         val list = mutableListOf<EventData>().apply {
             for ((_, v) in _postDataListInternal[channelId.value!!]!!) {
@@ -932,7 +949,6 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         event.id = Event.generateHash(event, true)
         event.sig = Event.sign(event, Config.config.privateKey)
         send(event)
-        send(Filter(kinds = listOf(Kind.PinList.num), authors = listOf(Config.config.getPublicKey()), limit = 1))
     }
 
     suspend fun unpinnedChannel(id : String) = withContext(Dispatchers.Default) {
