@@ -35,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -84,6 +85,21 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     var showRelayConnectionStatus by remember { mutableStateOf(false) }
     val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
     val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
+    val postFirstVisibleIndex = remember { mutableStateMapOf<String, Int>() }
+    val changeChannel : (String) -> Unit = { id ->
+        scope.launch(Dispatchers.Main) {
+            if (channelId.value!!.isNotEmpty()) {
+                val info = postListState.layoutInfo.visibleItemsInfo
+                if (info.isNotEmpty()) {
+                    postFirstVisibleIndex[channelId.value!!] = info.first().index
+                }
+                else {
+                    postFirstVisibleIndex[channelId.value!!] = 0
+                }
+            }
+            networkViewModel.setChannel(id)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         ModalNavigationDrawer(
@@ -215,7 +231,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                     scope.launch(Dispatchers.Main) {
                                         manager.clearFocus()
                                         drawerState.close()
-                                        networkViewModel.setChannel(it)
+                                        changeChannel(it)
                                     }
                                 }, onLongPress = {
                                     expanded = true
@@ -262,7 +278,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                         scope.launch(Dispatchers.Main) {
                                             manager.clearFocus()
                                             drawerState.close()
-                                            networkViewModel.setChannel(it.event.id)
+                                            changeChannel(it.event.id)
                                         }
                                     }, onLongPress = {
                                         expanded = true
@@ -534,7 +550,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 }
                             }, onMoveChannel = { id ->
                                 scope.launch(Dispatchers.Default) {
-                                    networkViewModel.setChannel(id)
+                                    changeChannel(id)
                                 }
                             }
                         )
@@ -596,6 +612,16 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                 val info = postListState.layoutInfo.visibleItemsInfo
                 if (info.isNotEmpty() && info.first().index == 1) {
                     postListState.scrollToItem(0)
+                }
+            }
+        }, onFirstPostChanged = {
+            scope.launch(Dispatchers.Main) {
+                if (channelId.value!!.isNotEmpty()) {
+                    if (!postFirstVisibleIndex.contains(channelId.value!!)) {
+                        postFirstVisibleIndex[channelId.value!!] = 0
+                    }
+                    val index = postFirstVisibleIndex[channelId.value!!]!!
+                    postListState.scrollToItem(index)
                 }
             }
         }, onPostSuccess = { _ ->

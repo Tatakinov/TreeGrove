@@ -1,7 +1,6 @@
 package io.github.tatakinov.treegrove
 
 import android.graphics.BitmapFactory
-import android.util.Log
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -67,6 +66,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     private suspend fun connect(config : ConfigRelayData, onConnectFailure: (Relay) -> Unit, onNewPost : (Relay, Event) -> Unit,
+                                onFirstPostChanged : () -> Unit,
                                 onPostSuccess : (Relay) -> Unit, onPostFailure: (Relay) -> Unit) = withContext(Dispatchers.Default) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
@@ -223,6 +223,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     }
                                     if (userMetaDataIdList.isNotEmpty()) {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
+                                    }
+                                    if (postDataList.isNotEmpty() && events.contains(postDataList.first().event)) {
+                                        onFirstPostChanged()
                                     }
                                 }
                             }
@@ -553,6 +556,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     suspend fun connect(configs : List<ConfigRelayData>, onConnectFailure : (Relay) -> Unit, onNewPost: (Relay, Event) -> Unit,
+                        onFirstPostChanged: () -> Unit,
                         onPostSuccess : (Relay) -> Unit, onPostFailure : (Relay) -> Unit) = withContext(Dispatchers.Default) {
         _channelListInternal = mutableMapOf<String, MutableList<EventData>>().apply {
             for ((k, v) in _channelListInternal) {
@@ -569,7 +573,8 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             sortByDescending { it.event.createdAt }
         })
         for (config in configs) {
-            this@NetworkViewModel.connect(config, onConnectFailure, onNewPost, onPostSuccess, onPostFailure)
+            this@NetworkViewModel.connect(config, onConnectFailure = onConnectFailure, onNewPost = onNewPost,
+                onFirstPostChanged = onFirstPostChanged, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
         }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
@@ -677,8 +682,10 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     _channelId.value = channelId
                 }
                 if (_channelId.value!!.isNotEmpty()) {
+                    var limit : Long = 0
                     if (!_postDataListInternal.contains(_channelId.value!!)) {
                         _postDataListInternal[_channelId.value!!] = mutableMapOf()
+                        limit = Config.config.fetchSize
                     }
                     val postDataList = mutableListOf<EventData>().apply {
                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
@@ -688,7 +695,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     closePostFilter()
                     val filter = Filter(
                         kinds = listOf(Kind.ChannelMessage.num),
-                        limit = Config.config.fetchSize,
+                        limit = limit,
                         tags = mapOf("e" to listOf(channelId))
                     )
                     viewModelScope.launch(Dispatchers.IO) {
