@@ -970,14 +970,14 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         send(event)
     }
 
-    suspend fun unpinnedChannel(id : String) = withContext(Dispatchers.Default) {
+    suspend fun unpinChannel(id : String) = withContext(Dispatchers.Default) {
         if (!_pinnedChannelListInternal.remove(id)) {
             return@withContext
         }
         refreshPinnedChannel()
     }
 
-    suspend fun pinnedChannel(id : String) = withContext(Dispatchers.Default) {
+    suspend fun pinChannel(id : String) = withContext(Dispatchers.Default) {
         if (_pinnedChannelListInternal.contains(id)) {
             return@withContext
         }

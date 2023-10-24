@@ -255,7 +255,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                         } else {
                                             scope.launch(Dispatchers.Default) {
                                                 expanded = false
-                                                networkViewModel.unpinnedChannel(it)
+                                                networkViewModel.unpinChannel(it)
                                             }
                                         }
                                     })
@@ -299,7 +299,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                             else {
                                                 scope.launch(Dispatchers.Default) {
                                                     expanded = false
-                                                    networkViewModel.pinnedChannel(it.event.id)
+                                                    networkViewModel.pinChannel(it.event.id)
                                                 }
                                             }
                                         })
