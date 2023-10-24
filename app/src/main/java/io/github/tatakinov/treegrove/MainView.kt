@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -47,6 +48,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -167,7 +169,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             .width(Const.ACTION_ICON_SIZE))
                         TextField(value = searchChannel, onValueChange = {
                             searchChannel = it.replace("\n", "")
-                        }, maxLines = 1)
+                        }, maxLines = 1, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
                     }
                     Divider()
                     val list = if (searchChannel.isEmpty()) {
