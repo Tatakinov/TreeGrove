@@ -87,17 +87,19 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
     val postFirstVisibleIndex = remember { mutableStateMapOf<String, Int>() }
     val changeChannel : (String) -> Unit = { id ->
-        scope.launch(Dispatchers.Main) {
-            if (channelId.value!!.isNotEmpty()) {
-                val info = postListState.layoutInfo.visibleItemsInfo
-                if (info.isNotEmpty()) {
-                    postFirstVisibleIndex[channelId.value!!] = info.first().index
+        if (channelId.value!! != id) {
+            scope.launch(Dispatchers.Main) {
+                if (channelId.value!!.isNotEmpty()) {
+                    val info = postListState.layoutInfo.visibleItemsInfo
+                    postFirstVisibleIndex[channelId.value!!] = if (info.isEmpty()) {
+                        0
+                    }
+                    else {
+                        info.first().index
+                    }
                 }
-                else {
-                    postFirstVisibleIndex[channelId.value!!] = 0
-                }
+                networkViewModel.setChannel(id)
             }
-            networkViewModel.setChannel(id)
         }
     }
 
