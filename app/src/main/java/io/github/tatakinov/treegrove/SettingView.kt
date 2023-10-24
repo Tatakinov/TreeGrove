@@ -1,6 +1,5 @@
 package io.github.tatakinov.treegrove
 
-import android.util.Log
 import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -33,6 +32,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import fr.acinq.secp256k1.Hex
+import fr.acinq.secp256k1.Secp256k1
 import io.github.tatakinov.treegrove.nostr.Keys
 import io.github.tatakinov.treegrove.nostr.NIP19
 import kotlinx.coroutines.Dispatchers
@@ -42,7 +42,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingView(onUpdated : () -> Unit) {
     val context = LocalContext.current
-    val coroutineScope  = rememberCoroutineScope()
+    val scope  = rememberCoroutineScope()
     val privInit    = if (Config.config.privateKey.isEmpty()) {
         ""
     }
@@ -149,9 +149,8 @@ fun SettingView(onUpdated : () -> Unit) {
             var valid = true
             if (privateKey.isNotEmpty()) {
                 val (hrp, priv) = NIP19.decode(privateKey)
-                Log.d("SettingView", priv.size.toString())
-                if (hrp.isEmpty() || priv.size != 32) {
-                    coroutineScope.launch(Dispatchers.Main) {
+                if (hrp.isEmpty() || priv.size != 32 || !Secp256k1.secKeyVerify(priv)) {
+                    scope.launch(Dispatchers.Main) {
                         Toast.makeText(context, context.getString(R.string.error_invalid_secret_key), Toast.LENGTH_SHORT).show()
                     }
                     valid = false
@@ -159,13 +158,13 @@ fun SettingView(onUpdated : () -> Unit) {
             }
             val list    = relayList.filter { it.url.isNotEmpty() && (it.url.startsWith("ws://") || it.url.startsWith("wss://")) }
             if (list.isEmpty()) {
-                coroutineScope.launch(Dispatchers.Main) {
+                scope.launch(Dispatchers.Main) {
                     Toast.makeText(context, context.getString(R.string.error_no_valid_URL), Toast.LENGTH_SHORT).show()
                 }
                 valid = false
             }
             if (fetchSize.toLongOrNull() == null) {
-                coroutineScope.launch(Dispatchers.Main) {
+                scope.launch(Dispatchers.Main) {
                     Toast.makeText(context, context.getString(R.string.error_invalid_string_in_fetch_size), Toast.LENGTH_SHORT)
                         .show()
                 }
@@ -173,7 +172,7 @@ fun SettingView(onUpdated : () -> Unit) {
             } else {
                 val size = fetchSize.toLong()
                 if (size < 10 || size > 100) {
-                    coroutineScope.launch(Dispatchers.Main) {
+                    scope.launch(Dispatchers.Main) {
                         Toast.makeText(context, context.getString(R.string.error_invalid_range_of_fetch_size), Toast.LENGTH_SHORT)
                             .show()
                     }

@@ -9,7 +9,9 @@ class Keys {
         fun generatePrivateKey(): ByteArray {
             val srg = SecureRandom()
             val bytes = ByteArray(32)
-            srg.nextBytes(bytes)
+            do {
+                srg.nextBytes(bytes)
+            } while (!Secp256k1.secKeyVerify(bytes))
             return bytes
         }
 
