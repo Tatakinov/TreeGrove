@@ -67,7 +67,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     private suspend fun connect(config : ConfigRelayData, onConnectFailure: (Relay) -> Unit, onNewPost : (Relay, Event) -> Unit,
-                                onFirstPostChanged : () -> Unit,
+                                onFirstPostRefreshed : () -> Unit,
                                 onPostSuccess : (Relay) -> Unit, onPostFailure: (Relay) -> Unit) = withContext(Dispatchers.Default) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
@@ -225,8 +225,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     if (userMetaDataIdList.isNotEmpty()) {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
                                     }
-                                    if (postDataList.isNotEmpty() && events.contains(postDataList.first().event)) {
-                                        onFirstPostChanged()
+                                    events.sortedByDescending { it.createdAt }
+                                    if (postDataList.isNotEmpty() && events.isNotEmpty() && events.first() == postDataList.first().event) {
+                                        onFirstPostRefreshed()
                                     }
                                 }
                             }
@@ -575,7 +576,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         })
         for (config in configs) {
             this@NetworkViewModel.connect(config, onConnectFailure = onConnectFailure, onNewPost = onNewPost,
-                onFirstPostChanged = onFirstPostChanged, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
+                onFirstPostRefreshed = onFirstPostChanged, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
         }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
