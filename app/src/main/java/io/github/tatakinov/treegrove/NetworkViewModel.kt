@@ -38,6 +38,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     private val _eventMapInternal = mutableMapOf<String, MutableSet<Event>>()
     private val _eventMap = MutableLiveData<Map<String, Set<Event>>>(mapOf())
     val eventMap : LiveData<Map<String, Set<Event>>> get() = _eventMap
+    private val _postLastBrowsed = mutableMapOf<String, Long>()
     private val _postDataListInternal = mutableMapOf<String, MutableMap<String, MutableList<EventData>>>("" to mutableMapOf())
     private val _postDataList = MutableLiveData<List<EventData>>(listOf())
     val postDataList : LiveData<List<EventData>> get() = _postDataList
@@ -546,7 +547,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 _pinnedChannelList.postValue(_pinnedChannelListInternal)
                 val l = list.filterNot { _channelMetaDataInternal.contains(it) }
                 if (l.isNotEmpty()) {
-                    send(Filter(ids = l, kinds = listOf(Kind.ChannelCreation.num), limit = l.size.toLong(), until = System.currentTimeMillis() / 1000))
+                    send(Filter(ids = l, kinds = listOf(Kind.ChannelCreation.num), limit = l.size.toLong(), until = Misc.now()))
                 }
             }
 
@@ -678,6 +679,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     suspend fun setChannel(channelId : String) = withContext(Dispatchers.Default) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
+                if (_channelId.value!!.isNotEmpty()) {
+                    _postLastBrowsed[_channelId.value!!]    = Misc.now()
+                }
                 withContext(Dispatchers.Main) {
                     _channelId.value = channelId
                 }
@@ -686,6 +690,12 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     if (!_postDataListInternal.contains(_channelId.value!!)) {
                         _postDataListInternal[_channelId.value!!] = mutableMapOf()
                         limit = Config.config.fetchSize
+                    }
+                    val since = if (_postLastBrowsed.contains(_channelId.value!!)) {
+                        _postLastBrowsed[_channelId.value!!]!!
+                    }
+                    else {
+                        0
                     }
                     val postDataList = mutableListOf<EventData>().apply {
                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
@@ -696,10 +706,11 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     val filter = Filter(
                         kinds = listOf(Kind.ChannelMessage.num),
                         limit = limit,
-                        tags = mapOf("e" to listOf(channelId))
+                        tags = mapOf("e" to listOf(channelId)),
+                        since = since
                     )
                     viewModelScope.launch(Dispatchers.IO) {
-                        send(filter, since = true)
+                        send(filter)
                     }
                 }
             }
@@ -951,7 +962,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     private suspend fun refreshPinnedChannel() = withContext(Dispatchers.Default) {
-        val event = Event(Kind.PinList.num, "", System.currentTimeMillis() / 1000, Config.config.getPublicKey(),
+        val event = Event(Kind.PinList.num, "", Misc.now(), Config.config.getPublicKey(),
             tags = _pinnedChannelListInternal.map { listOf("e", it) })
         event.id = Event.generateHash(event, true)
         event.sig = Event.sign(event, Config.config.privateKey)

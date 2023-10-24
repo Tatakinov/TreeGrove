@@ -337,7 +337,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 val event = Event(
                                     Kind.ChannelCreation.num,
                                     json.toString(),
-                                    System.currentTimeMillis() / 1000,
+                                    Misc.now(),
                                     Config.config.getPublicKey()
                                 )
                                 event.id    = Event.generateHash(event, true)
@@ -375,7 +375,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 val event = Event(
                                     Kind.Metadata.num,
                                     json.toString(),
-                                    System.currentTimeMillis() / 1000,
+                                    Misc.now(),
                                     Config.config.getPublicKey()
                                 )
                                 event.id    = Event.generateHash(event, true)
@@ -530,7 +530,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 val e = Event(
                                     kind = Kind.ChannelHideMessage.num,
                                     content = "",
-                                    createdAt = System.currentTimeMillis() / 1000,
+                                    createdAt = Misc.now(),
                                     pubkey = Config.config.getPublicKey(),
                                     tags = listOf(listOf("e", event.id))
                                 )
@@ -541,7 +541,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 val e = Event(
                                     kind = Kind.ChannelMuteUser.num,
                                     content = "",
-                                    createdAt = System.currentTimeMillis() / 1000,
+                                    createdAt = Misc.now(),
                                     pubkey = Config.config.getPublicKey(),
                                     tags = listOf(listOf("p", event.pubkey))
                                 )
