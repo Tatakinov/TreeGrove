@@ -560,20 +560,22 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     suspend fun connect(configs : List<ConfigRelayData>, onConnectFailure : (Relay) -> Unit, onNewPost: (Relay, Event) -> Unit,
                         onFirstPostChanged: () -> Unit,
                         onPostSuccess : (Relay) -> Unit, onPostFailure : (Relay) -> Unit) = withContext(Dispatchers.Default) {
-        _channelListInternal = mutableMapOf<String, MutableList<EventData>>().apply {
-            for ((k, v) in _channelListInternal) {
-                val list = mutableListOf<EventData>().apply {
-                    addAll(v.filter { f -> configs.any { f.from.contains(it.url) } })
-                }
-                if (list.isNotEmpty()) {
-                    put(k, list)
+        _mutex.withLock {
+            _channelListInternal = mutableMapOf<String, MutableList<EventData>>().apply {
+                for ((k, v) in _channelListInternal) {
+                    val list = mutableListOf<EventData>().apply {
+                        addAll(v.filter { f -> configs.any { f.from.contains(it.url) } })
+                    }
+                    if (list.isNotEmpty()) {
+                        put(k, list)
+                    }
                 }
             }
+            _channelList.postValue(mutableListOf<EventData>().apply {
+                addAll(_channelListInternal.values.flatten())
+                sortByDescending { it.event.createdAt }
+            })
         }
-        _channelList.postValue(mutableListOf<EventData>().apply {
-            addAll(_channelListInternal.values.flatten())
-            sortByDescending { it.event.createdAt }
-        })
         for (config in configs) {
             this@NetworkViewModel.connect(config, onConnectFailure = onConnectFailure, onNewPost = onNewPost,
                 onFirstPostRefreshed = onFirstPostChanged, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
@@ -622,21 +624,21 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
 
     suspend fun send(filter : Filter, since : Boolean = false, until : Boolean = false)   = withContext(Dispatchers.IO) {
         viewModelScope.launch(Dispatchers.Default) {
-            val list : List<EventData>? = if (filter.kinds.contains(Kind.ChannelCreation.num)) {
-                mutableListOf<EventData>().apply {
-                    addAll(_channelListInternal.values.flatten())
-                    sortByDescending { it.event.createdAt }
-                }
-            } else if (filter.kinds.contains(Kind.ChannelMessage.num)) {
-                mutableListOf<EventData>().apply {
-                    addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
-                    sortByDescending { it.event.createdAt }
-                }
-            }
-            else {
-                null
-            }
             _mutex.withLock() {
+                val list : List<EventData>? = if (filter.kinds.contains(Kind.ChannelCreation.num)) {
+                    mutableListOf<EventData>().apply {
+                        addAll(_channelListInternal.values.flatten())
+                        sortByDescending { it.event.createdAt }
+                    }
+                } else if (filter.kinds.contains(Kind.ChannelMessage.num)) {
+                    mutableListOf<EventData>().apply {
+                        addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
+                        sortByDescending { it.event.createdAt }
+                    }
+                }
+                else {
+                    null
+                }
                 for (relay in _relays) {
                     var u : Long = -1
                     var s : Long = -1
@@ -963,16 +965,21 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     private suspend fun refreshPinnedChannel() = withContext(Dispatchers.Default) {
-        val event = Event(Kind.PinList.num, "", Misc.now(), Config.config.getPublicKey(),
-            tags = _pinnedChannelListInternal.map { listOf("e", it) })
+        lateinit var event : Event
+        _mutex.withLock {
+            event = Event(Kind.PinList.num, "", Misc.now(), Config.config.getPublicKey(),
+                tags = _pinnedChannelListInternal.map { listOf("e", it) })
+        }
         event.id = Event.generateHash(event, true)
         event.sig = Event.sign(event, Config.config.privateKey)
         send(event)
     }
 
     suspend fun unpinChannel(id : String) = withContext(Dispatchers.Default) {
-        if (!_pinnedChannelListInternal.remove(id)) {
-            return@withContext
+        _mutex.withLock {
+            if (!_pinnedChannelListInternal.remove(id)) {
+                return@withContext
+            }
         }
         refreshPinnedChannel()
     }
@@ -981,7 +988,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         if (_pinnedChannelListInternal.contains(id)) {
             return@withContext
         }
-        _pinnedChannelListInternal.add(id)
+        _mutex.withLock {
+            _pinnedChannelListInternal.add(id)
+        }
         refreshPinnedChannel()
     }
 }
