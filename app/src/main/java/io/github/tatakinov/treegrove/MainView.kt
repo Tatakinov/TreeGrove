@@ -87,7 +87,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     var showRelayConnectionStatus by remember { mutableStateOf(false) }
     val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
     val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
-    val postFirstVisibleIndex = remember { mutableStateMapOf<String, Int>() }
+    val postFirstVisibleIndex = remember { mutableMapOf<String, Int>() }
     val changeChannel : (String) -> Unit = { id ->
         if (channelId.value!! != id) {
             scope.launch(Dispatchers.Main) {
@@ -621,10 +621,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
         }, onFirstPostChanged = {
             scope.launch(Dispatchers.Main) {
                 if (channelId.value!!.isNotEmpty()) {
-                    if (!postFirstVisibleIndex.contains(channelId.value!!)) {
-                        postFirstVisibleIndex[channelId.value!!] = 0
-                    }
-                    val index = postFirstVisibleIndex[channelId.value!!]!!
+                    val index = postFirstVisibleIndex[channelId.value!!] ?: 0
                     postListState.scrollToItem(index)
                 }
             }
