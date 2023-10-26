@@ -1,7 +1,6 @@
 package io.github.tatakinov.treegrove.nostr
 
-import android.util.Log
-import java.lang.Exception
+import kotlin.Exception
 
 class NIP19 {
     companion object {
@@ -14,7 +13,12 @@ class NIP19 {
                 if (l.toInt() == 0) {
                     throw Exception("malformed TLV $t")
                 }
-                val v = data.slice(index + 2 until index + 2 + l)
+                val v = if (index + 2 + l > data.size) {
+                    throw Exception("malformed TLV: ${index + 2 + l} > ${data.size}")
+                }
+                else {
+                    data.slice(index + 2 until index + 2 + l)
+                }
                 index += 2 + l
                 if (v.isEmpty()) {
                     throw Exception("not enough data to read on TLV $t")
