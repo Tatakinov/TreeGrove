@@ -34,6 +34,11 @@ object BitConverter {
                 nextIn =   false
                 nextOut    = true
             }
+            if (nextOut) {
+                result  += output.toByte()
+                output  = 0x00
+                remainTo   = to
+            }
             if (nextIn) {
                 index++
                 if (index >= data.size) {
@@ -41,11 +46,6 @@ object BitConverter {
                 }
                 input   = data[index].toUByte().toInt()
                 remainFrom = from
-            }
-            if (nextOut) {
-                result  += output.toByte()
-                output  = 0x00
-                remainTo   = to
             }
         }
         if (remainTo > 0 && padding) {
