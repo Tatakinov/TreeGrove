@@ -390,7 +390,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                     Hex.encode(it)
                 } ?: ""
                 val kind = tlv[3]?.get(0)?.let {
-                    Hex.encode(it).toIntOrNull() ?: 16
+                    Hex.encode(it).toIntOrNull(16) ?: 16
                 } ?: -1
                 var list = onGetEventMap()[id] ?: mutableListOf()
                 if (author.isNotEmpty()) {
