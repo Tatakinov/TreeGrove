@@ -516,7 +516,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                     tags = mapOf("e" to listOf(channelId.value!!))
                                 )
                                 scope.launch(Dispatchers.Default) {
-                                    networkViewModel.send(filter)
+                                    networkViewModel.send(filter, until = true)
                                 }
                             }, onUserNotFound = { pubkey ->
                                 scope.launch(Dispatchers.Default) {
