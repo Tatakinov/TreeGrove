@@ -43,6 +43,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
@@ -90,6 +91,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
     val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
     val postFirstVisibleIndex = remember { mutableMapOf<String, Int>() }
+    var isNewPostsReceived by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     val refreshState = rememberPullRefreshState(refreshing = refreshing, onRefresh = {
         val filter = Filter(
@@ -629,15 +631,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                 }
             }
         }, onNewPosts = {
-            scope.launch(Dispatchers.Main) {
-                if (channelId.value!!.isNotEmpty()) {
-                    val index = postFirstVisibleIndex[channelId.value!!]
-                        ?: (postListState.layoutInfo.totalItemsCount - 1)
-                    if (index >= 0) {
-                        postListState.scrollToItem(index)
-                    }
-                }
-            }
+            isNewPostsReceived = true
         }, onPostSuccess = { _ ->
         }, onPostFailure = { relay ->
             scope.launch(Dispatchers.Main) {
@@ -648,5 +642,16 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                 ).show()
             }
         })
+    }
+    LaunchedEffect(postListState) {
+        snapshotFlow { postListState.layoutInfo.totalItemsCount }
+            .collect {
+                if (it > 0 && isNewPostsReceived) {
+                    isNewPostsReceived = false
+                    scope.launch(Dispatchers.Main) {
+                        postListState.scrollToItem(it - 1)
+                    }
+                }
+            }
     }
 }
