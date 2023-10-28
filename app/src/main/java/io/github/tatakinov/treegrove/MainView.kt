@@ -92,7 +92,9 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
     val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
     val postFirstVisibleIndex = remember { mutableMapOf<String, Int>() }
+    var isNewPostReceived by remember { mutableStateOf(false) }
     var isNewPostsReceived by remember { mutableStateOf(false) }
+    var isChannelSwitched by remember { mutableStateOf(false) }
     val isLatestBefore by remember {
         derivedStateOf {
             val info = postListState.layoutInfo
@@ -123,6 +125,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     }
                 }
                 networkViewModel.setChannel(id)
+                isChannelSwitched = true
             }
         }
     }
@@ -629,6 +632,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     Toast.LENGTH_SHORT
                 ).show()
             }
+        }, onNewPost = {
+            isNewPostReceived = true
         }, onNewPosts = {
             isNewPostsReceived = true
         }, onPostSuccess = { _ ->
@@ -642,12 +647,26 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
             }
         })
     }
+    LaunchedEffect(postDataList.value!!) {
+        if (channelId.value!!.isNotEmpty() && isChannelSwitched) {
+            isChannelSwitched = false
+            val index = postFirstVisibleIndex[channelId.value!!] ?: 0
+            launch(Dispatchers.Main) {
+                postListState.scrollToItem(index)
+            }
+        }
+    }
     LaunchedEffect(postListState) {
         snapshotFlow { postListState.layoutInfo.totalItemsCount }
             .collect {
-                if (isNewPostsReceived) {
-                    if (it > 0 || isLatestBefore) {
-                        isNewPostsReceived = false
+                if (it > 0) {
+                    if ((isNewPostReceived && isLatestBefore) || isNewPostsReceived) {
+                        if (isNewPostReceived) {
+                            isNewPostReceived = false
+                        }
+                        if (isNewPostsReceived) {
+                            isNewPostsReceived = false
+                        }
                         scope.launch(Dispatchers.Main) {
                             postListState.scrollToItem(it - 1)
                         }

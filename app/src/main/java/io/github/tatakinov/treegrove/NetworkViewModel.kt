@@ -67,7 +67,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     private suspend fun connect(config : ConfigRelayData, onConnectFailure: (Relay) -> Unit,
-                                onNewPosts : () -> Unit,
+                                onNewPost : () -> Unit, onNewPosts : () -> Unit,
                                 onPostSuccess : (Relay) -> Unit, onPostFailure: (Relay) -> Unit) = withContext(Dispatchers.Default) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
@@ -122,6 +122,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                             put(k, v)
                                         }
                                     }
+                                    if (postDataList.isNotEmpty() && postDataList.last().event == event) {
+                                        onNewPost()
+                                    }
                                     _channelList.postValue(channelList)
                                     _postDataList.postValue(postDataList)
                                     _channelMetaData.postValue(channelMap)
@@ -140,9 +143,6 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     }
                                     if (userMetaDataIdList.isNotEmpty()) {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
-                                    }
-                                    if (postDataList.isNotEmpty() && postDataList.last().event == event) {
-                                        onNewPosts()
                                     }
                                 }
                             }
@@ -206,6 +206,10 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                             put(k, v)
                                         }
                                     }
+                                    //チャンネルに初めて入ったときのイベントでのみ発火
+                                    if (events.any { it.kind == Kind.ChannelMessage.num } && filterList.none { it.until > 0 }) {
+                                        onNewPosts()
+                                    }
                                     _channelList.postValue(channelList)
                                     _postDataList.postValue(postDataList)
                                     _channelMetaData.postValue(channelMap)
@@ -224,10 +228,6 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     }
                                     if (userMetaDataIdList.isNotEmpty()) {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
-                                    }
-                                    //チャンネルに初めて入ったときのイベントでのみ発火
-                                    if (events.any { it.kind == Kind.ChannelMessage.num } && filterList.none { it.until > 0 }) {
-                                        onNewPosts()
                                     }
                                 }
                             }
@@ -558,7 +558,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     suspend fun connect(configs : List<ConfigRelayData>, onConnectFailure : (Relay) -> Unit,
-                        onNewPosts: () -> Unit,
+                        onNewPost : () -> Unit, onNewPosts: () -> Unit,
                         onPostSuccess : (Relay) -> Unit, onPostFailure : (Relay) -> Unit) = withContext(Dispatchers.Default) {
         _mutex.withLock {
             _channelListInternal = mutableMapOf<String, MutableList<EventData>>().apply {
@@ -578,7 +578,8 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
         for (config in configs) {
             this@NetworkViewModel.connect(config, onConnectFailure = onConnectFailure,
-                onNewPosts = onNewPosts, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
+                onNewPost = onNewPost, onNewPosts = onNewPosts,
+                onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
         }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
