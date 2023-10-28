@@ -67,7 +67,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     private suspend fun connect(config : ConfigRelayData, onConnectFailure: (Relay) -> Unit, onNewPost : (Relay, Event) -> Unit,
-                                onFirstPostRefreshed : () -> Unit,
+                                onNewPosts : () -> Unit,
                                 onPostSuccess : (Relay) -> Unit, onPostFailure: (Relay) -> Unit) = withContext(Dispatchers.Default) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
@@ -105,7 +105,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     }
                                     val postDataList = mutableListOf<EventData>().apply {
                                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
-                                        sortByDescending { it.event.createdAt }
+                                        sortBy { it.event.createdAt }
                                     }
                                     val channelMap = mutableMapOf<String, MetaData>().apply {
                                         for ((k, v) in _channelMetaDataInternal) {
@@ -141,7 +141,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     if (userMetaDataIdList.isNotEmpty()) {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
                                     }
-                                    if (postDataList.isNotEmpty() && postDataList.first().event == event) {
+                                    if (postDataList.isNotEmpty() && postDataList.last().event == event) {
                                         onNewPost(relay, event)
                                     }
                                 }
@@ -189,7 +189,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     }
                                     val postDataList = mutableListOf<EventData>().apply {
                                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
-                                        sortByDescending { it.event.createdAt }
+                                        sortBy { it.event.createdAt }
                                     }
                                     val channelMap = mutableMapOf<String, MetaData>().apply {
                                         for ((k, v) in _channelMetaDataInternal) {
@@ -225,9 +225,9 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                     if (userMetaDataIdList.isNotEmpty()) {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
                                     }
-                                    events.sortedByDescending { it.createdAt }
-                                    if (postDataList.isNotEmpty() && events.isNotEmpty() && events.first() == postDataList.first().event) {
-                                        onFirstPostRefreshed()
+                                    //チャンネルに初めて入ったときのイベントでのみ発火
+                                    if (events.any { it.kind == Kind.ChannelMessage.num } && filterList.none { it.until > 0 }) {
+                                        onNewPosts()
                                     }
                                 }
                             }
@@ -334,7 +334,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             for ((_, v) in _postDataListInternal[channelId.value!!]!!) {
                 addAll(v.filter { it.from.contains(relay.url) })
             }
-            sortByDescending { it.event.createdAt }
+            sortBy { it.event.createdAt }
         }
         if (channelId.value!!.isNotEmpty()) {
             val filter = if (list.isEmpty()) {
@@ -344,7 +344,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                     tags = mapOf("e" to listOf(channelId.value!!))
                 )
             } else {
-                val first = list.first()
+                val first = list.last()
                 Filter(
                     kinds = listOf(Kind.ChannelMessage.num),
                     limit = Config.config.fetchSize,
@@ -558,7 +558,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     }
 
     suspend fun connect(configs : List<ConfigRelayData>, onConnectFailure : (Relay) -> Unit, onNewPost: (Relay, Event) -> Unit,
-                        onFirstPostChanged: () -> Unit,
+                        onNewPosts: () -> Unit,
                         onPostSuccess : (Relay) -> Unit, onPostFailure : (Relay) -> Unit) = withContext(Dispatchers.Default) {
         _mutex.withLock {
             _channelListInternal = mutableMapOf<String, MutableList<EventData>>().apply {
@@ -578,7 +578,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
         for (config in configs) {
             this@NetworkViewModel.connect(config, onConnectFailure = onConnectFailure, onNewPost = onNewPost,
-                onFirstPostRefreshed = onFirstPostChanged, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
+                onNewPosts = onNewPosts, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
         }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
@@ -633,7 +633,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                 } else if (filter.kinds.contains(Kind.ChannelMessage.num)) {
                     mutableListOf<EventData>().apply {
                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
-                        sortByDescending { it.event.createdAt }
+                        sortBy { it.event.createdAt }
                     }
                 }
                 else {

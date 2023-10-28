@@ -31,12 +31,14 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.pullrefresh.PullRefreshIndicator
+import androidx.compose.material3.pullrefresh.pullRefresh
+import androidx.compose.material3.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -88,6 +90,17 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
     val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
     val postFirstVisibleIndex = remember { mutableMapOf<String, Int>() }
+    var refreshing by remember { mutableStateOf(false) }
+    val refreshState = rememberPullRefreshState(refreshing = refreshing, onRefresh = {
+        val filter = Filter(
+            kinds = listOf(Kind.ChannelMessage.num),
+            limit = Config.config.fetchSize,
+            tags = mapOf("e" to listOf(channelId.value!!))
+        )
+        scope.launch(Dispatchers.Default) {
+            networkViewModel.send(filter, until = true)
+        }
+    })
     val changeChannel : (String) -> Unit = { id ->
         if (channelId.value!! != id) {
             scope.launch(Dispatchers.Main) {
@@ -187,7 +200,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 .fillMaxWidth()
                                 .clickable {
                                     showRelayConnectionStatus = !showRelayConnectionStatus
-                                }.padding(top = 10.dp, bottom = 10.dp)
+                                }
+                                .padding(top = 10.dp, bottom = 10.dp)
                             )
                         }
                         item {
@@ -393,7 +407,9 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     )
                 }
             }, modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .pullRefresh(refreshState)) {
                 Column {
                     var channelAbout = ""
                     Row(modifier = Modifier.clickable {
@@ -509,16 +525,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             },
                             modifier = Modifier
                                 .weight(1f),
-                            onRefresh = {
-                                val filter = Filter(
-                                    kinds = listOf(Kind.ChannelMessage.num),
-                                    limit = Config.config.fetchSize,
-                                    tags = mapOf("e" to listOf(channelId.value!!))
-                                )
-                                scope.launch(Dispatchers.Default) {
-                                    networkViewModel.send(filter, until = true)
-                                }
-                            }, onUserNotFound = { pubkey ->
+                            onUserNotFound = { pubkey ->
                                 scope.launch(Dispatchers.Default) {
                                     networkViewModel.fetchUserProfile(listOf(pubkey))
                                 }
@@ -560,6 +567,8 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         )
                     }
                 }
+                PullRefreshIndicator(refreshing = refreshing, state = refreshState,
+                    modifier = Modifier.align(Alignment.TopCenter))
                 TransmittedDataView(modifier = Modifier
                     .align(Alignment.BottomCenter),
                     onGetTransmittedDataSize = {
@@ -614,15 +623,19 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
         }, onNewPost = { _, _ ->
             scope.launch(Dispatchers.Main) {
                 val info = postListState.layoutInfo.visibleItemsInfo
-                if (info.isNotEmpty() && info.first().index == 1) {
-                    postListState.scrollToItem(0)
+                val total = postListState.layoutInfo.totalItemsCount
+                if (info.isNotEmpty() && info.last().index == total - 2) {
+                    postListState.scrollToItem(total - 1)
                 }
             }
-        }, onFirstPostChanged = {
+        }, onNewPosts = {
             scope.launch(Dispatchers.Main) {
                 if (channelId.value!!.isNotEmpty()) {
-                    val index = postFirstVisibleIndex[channelId.value!!] ?: 0
-                    postListState.scrollToItem(index)
+                    val index = postFirstVisibleIndex[channelId.value!!]
+                        ?: (postListState.layoutInfo.totalItemsCount - 1)
+                    if (index >= 0) {
+                        postListState.scrollToItem(index)
+                    }
                 }
             }
         }, onPostSuccess = { _ ->

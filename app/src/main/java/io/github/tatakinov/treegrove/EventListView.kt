@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,7 +39,7 @@ fun EventListView(onGetPostDataList : () -> List<EventData>,
                   onGetChannelMetaData: () -> Map<String, MetaData>,
                   onGetUserMetaData: () -> Map<String, MetaData>,
                   onGetChannelId : () -> String,
-                  onClickImageURL : (String) -> Unit, modifier: Modifier, onRefresh : () -> Unit,
+                  onClickImageURL : (String) -> Unit, modifier: Modifier,
                   onUserNotFound: (String) -> Unit, onEventNotFound: (Filter) -> Unit,
                   onPost : (Event) -> Unit,
                   onHide: (Event) -> Unit, onMute: (Event) -> Unit,
@@ -55,13 +56,21 @@ fun EventListView(onGetPostDataList : () -> List<EventData>,
     var replyEvent : Event? by remember {
         mutableStateOf(null)
     }
+    val isBottom by remember {
+        derivedStateOf {
+            val info = onGetLazyListState().layoutInfo
+            info.visibleItemsInfo.isEmpty() || info.visibleItemsInfo.last().index == info.totalItemsCount - 1
+        }
+    }
     var height by remember { mutableStateOf(0) }
     LazyColumn(state = onGetLazyListState(), modifier = modifier.onGloballyPositioned {
         if (height != it.size.height) {
             val diffHeight = height - it.size.height
             height = it.size.height
-            scope.launch(Dispatchers.Main) {
-                onGetLazyListState().scrollBy(diffHeight.toFloat())
+            if (diffHeight > 0 || !isBottom) {
+                scope.launch(Dispatchers.Main) {
+                    onGetLazyListState().scrollBy(diffHeight.toFloat())
+                }
             }
         }
     }) {
@@ -78,11 +87,6 @@ fun EventListView(onGetPostDataList : () -> List<EventData>,
                 }, onHide = onHide, onMute = onMute,
                 onMoveChannel = onMoveChannel
             )
-        }
-        item {
-            Button(onClick = { onRefresh() }, content = {
-                Text(context.getString(R.string.load_more), textAlign = TextAlign.Center)
-            }, modifier = Modifier.fillMaxWidth())
         }
     }
     if (doPost) {
