@@ -185,10 +185,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         item {
                             Text(context.getString(R.string.relay_connection_status), textAlign = TextAlign.Center, modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 10.dp, bottom = 10.dp)
                                 .clickable {
                                     showRelayConnectionStatus = !showRelayConnectionStatus
-                                })
+                                }.padding(top = 10.dp, bottom = 10.dp)
+                            )
                         }
                         item {
                             Divider()
