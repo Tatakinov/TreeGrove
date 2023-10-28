@@ -37,6 +37,7 @@ import androidx.compose.material3.pullrefresh.rememberPullRefreshState
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +93,12 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     val pinnedChannelList = networkViewModel.pinnedChannelList.observeAsState()
     val postFirstVisibleIndex = remember { mutableMapOf<String, Int>() }
     var isNewPostsReceived by remember { mutableStateOf(false) }
+    val isLatestBefore by remember {
+        derivedStateOf {
+            val info = postListState.layoutInfo
+            info.visibleItemsInfo.isEmpty() || info.visibleItemsInfo.last().index == info.totalItemsCount - 2
+        }
+    }
     var refreshing by remember { mutableStateOf(false) }
     val refreshState = rememberPullRefreshState(refreshing = refreshing, onRefresh = {
         val filter = Filter(
@@ -622,14 +629,6 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        }, onNewPost = { _, _ ->
-            scope.launch(Dispatchers.Main) {
-                val info = postListState.layoutInfo.visibleItemsInfo
-                val total = postListState.layoutInfo.totalItemsCount
-                if (info.isNotEmpty() && info.last().index == total - 2) {
-                    postListState.scrollToItem(total - 1)
-                }
-            }
         }, onNewPosts = {
             isNewPostsReceived = true
         }, onPostSuccess = { _ ->
@@ -646,10 +645,12 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     LaunchedEffect(postListState) {
         snapshotFlow { postListState.layoutInfo.totalItemsCount }
             .collect {
-                if (it > 0 && isNewPostsReceived) {
-                    isNewPostsReceived = false
-                    scope.launch(Dispatchers.Main) {
-                        postListState.scrollToItem(it - 1)
+                if (isNewPostsReceived) {
+                    if (it > 0 || isLatestBefore) {
+                        isNewPostsReceived = false
+                        scope.launch(Dispatchers.Main) {
+                            postListState.scrollToItem(it - 1)
+                        }
                     }
                 }
             }

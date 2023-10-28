@@ -66,7 +66,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }
 
-    private suspend fun connect(config : ConfigRelayData, onConnectFailure: (Relay) -> Unit, onNewPost : (Relay, Event) -> Unit,
+    private suspend fun connect(config : ConfigRelayData, onConnectFailure: (Relay) -> Unit,
                                 onNewPosts : () -> Unit,
                                 onPostSuccess : (Relay) -> Unit, onPostFailure: (Relay) -> Unit) = withContext(Dispatchers.Default) {
         viewModelScope.launch(Dispatchers.Default) {
@@ -142,7 +142,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                         fetchUserProfile(userMetaDataIdList.distinct(), relay)
                                     }
                                     if (postDataList.isNotEmpty() && postDataList.last().event == event) {
-                                        onNewPost(relay, event)
+                                        onNewPosts()
                                     }
                                 }
                             }
@@ -557,7 +557,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
         }
     }
 
-    suspend fun connect(configs : List<ConfigRelayData>, onConnectFailure : (Relay) -> Unit, onNewPost: (Relay, Event) -> Unit,
+    suspend fun connect(configs : List<ConfigRelayData>, onConnectFailure : (Relay) -> Unit,
                         onNewPosts: () -> Unit,
                         onPostSuccess : (Relay) -> Unit, onPostFailure : (Relay) -> Unit) = withContext(Dispatchers.Default) {
         _mutex.withLock {
@@ -577,7 +577,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
             })
         }
         for (config in configs) {
-            this@NetworkViewModel.connect(config, onConnectFailure = onConnectFailure, onNewPost = onNewPost,
+            this@NetworkViewModel.connect(config, onConnectFailure = onConnectFailure,
                 onNewPosts = onNewPosts, onPostSuccess = onPostSuccess, onPostFailure = onPostFailure)
         }
         viewModelScope.launch(Dispatchers.Default) {
