@@ -207,7 +207,7 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
                                         }
                                     }
                                     //チャンネルに初めて入ったときのイベントでのみ発火
-                                    if (events.any { it.kind == Kind.ChannelMessage.num } && filterList.none { it.until > 0 }) {
+                                    if (postDataList.isNotEmpty() && events.any { it.kind == Kind.ChannelMessage.num } && filterList.none { it.until > 0 }) {
                                         onNewPosts()
                                     }
                                     _channelList.postValue(channelList)
