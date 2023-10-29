@@ -109,6 +109,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     }
     var refreshing by remember { mutableStateOf(false) }
     val refreshState = rememberPullRefreshState(refreshing = refreshing, onRefresh = {
+        refreshing = true
         val filter = Filter(
             kinds = listOf(Kind.ChannelMessage.num),
             limit = Config.config.fetchSize,
@@ -116,6 +117,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
         )
         scope.launch(Dispatchers.Default) {
             networkViewModel.send(filter, until = true)
+            refreshing = false
         }
     })
     val changeChannel : (String) -> Unit = { id ->

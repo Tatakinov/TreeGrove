@@ -71,13 +71,17 @@ class MainActivity : ComponentActivity() {
                                     Config.load(context, onLoad = {
                                         coroutineScope.launch(Dispatchers.Main) {
                                             if (it.relayList.isEmpty()) {
-                                                navController.popBackStack()
-                                                navController.navigate("post")
-                                                navController.navigate("setting")
+                                                if (navController.currentDestination?.route == "loading") {
+                                                    navController.popBackStack()
+                                                    navController.navigate("post")
+                                                    navController.navigate("setting")
+                                                }
                                             }
                                             else {
-                                                navController.popBackStack()
-                                                navController.navigate("post")
+                                                if (navController.currentDestination?.route == "loading") {
+                                                    navController.popBackStack()
+                                                    navController.navigate("post")
+                                                }
                                             }
                                         }
                                     })
