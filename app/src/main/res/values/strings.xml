@@ -7,13 +7,13 @@
     <string name="private_key">Private key(optional)</string>
     <string name="relay">Relay</string>
     <string name="add_relay_server">Add relay server</string>
-    <string name="fetch_size_description">Number of posts to fetch at once (10 – 100)</string>
+    <string name="fetch_size_description">Number of posts to fetch at once (10 – 200)</string>
     <string name="display_profile_picture">Display profile picture</string>
     <string name="fetch_profile_picture_in_only_wifi">Fetch profile picture in only wifi</string>
     <string name="error_invalid_secret_key">Invalid secret key</string>
     <string name="error_no_valid_URL">No valid URL was found</string>
     <string name="error_invalid_string_in_fetch_size">Invalid string in fetch size</string>
-    <string name="error_invalid_range_of_fetch_size">Fetch size is invalid range</string>
+    <string name="error_invalid_range_of_fetch_size">Fetch size is invalid range(10 – 200)</string>
     <string name="name" translatable="false">Name</string>
     <string name="about" translatable="false">About</string>
     <string name="picture_url" translatable="false">Picture URL</string>
@@ -55,6 +55,7 @@
     <string name="pinned_channel">Pinned channel</string>
     <string name="unpinned">Unpinned</string>
     <string name="pinned">Pinned</string>
+    <string name="save">Save</string>
     <string name="about_license">About license</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License

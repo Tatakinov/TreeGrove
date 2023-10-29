@@ -4,13 +4,13 @@
     <string name="private_key">秘密鍵(任意)</string>
     <string name="relay">リレー</string>
     <string name="add_relay_server">リレーを追加する</string>
-    <string name="fetch_size_description">一度に読み込む投稿の数(10 – 100)</string>
+    <string name="fetch_size_description">一度に読み込む投稿の数(10 – 200)</string>
     <string name="display_profile_picture">プロフィール画像を表示する</string>
     <string name="fetch_profile_picture_in_only_wifi">Wifi時のみプロフィール画像を取得する</string>
     <string name="error_invalid_secret_key">無効な秘密鍵です</string>
     <string name="error_no_valid_URL">有効なリレーのURLがありません</string>
     <string name="error_invalid_string_in_fetch_size">無効な値が含まれています</string>
-    <string name="error_invalid_range_of_fetch_size">10から100の間の数にしてください</string>
+    <string name="error_invalid_range_of_fetch_size">10から200の間の数にしてください</string>
     <string name="error_channel_name_required">チャンネル名が必要です</string>
     <string name="error_set_private_key">秘密鍵を設定してください</string>
     <string name="error_failed_to_connect">%s への接続に失敗しました</string>
@@ -45,5 +45,6 @@
     <string name="pinned_channel">ピンされたチャンネル</string>
     <string name="unpinned">ピンを外す</string>
     <string name="pinned">ピンする</string>
+    <string name="save">保存</string>
     <string name="about_license">ライセンスについて</string>
 </resources>

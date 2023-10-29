@@ -77,6 +77,29 @@ fun SettingView(onUpdated : () -> Unit) {
                     }, modifier = Modifier.fillMaxWidth())
                 }
             }
+            item {
+                TextField(label = {
+                    Text(context.getString(R.string.fetch_size_description))
+                }, value = fetchSize, onValueChange = {
+                    fetchSize = it
+                }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = displayProfilePicture, onCheckedChange = {
+                        displayProfilePicture = it
+                    })
+                    Text(context.getString(R.string.display_profile_picture))
+                }
+            }
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = fetchProfilePictureOnlyWifi, onCheckedChange = {
+                        fetchProfilePictureOnlyWifi = it
+                    })
+                    Text(context.getString(R.string.fetch_profile_picture_in_only_wifi))
+                }
+            }
             items(count = relayList.size) { index ->
                 Column {
                     Row {
@@ -121,29 +144,6 @@ fun SettingView(onUpdated : () -> Unit) {
                     Text(context.getString(R.string.add_relay_server))
                 }, modifier = Modifier.fillMaxWidth())
             }
-            item {
-                TextField(label = {
-                    Text(context.getString(R.string.fetch_size_description))
-                }, value = fetchSize, onValueChange = {
-                    fetchSize = it
-                }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
-            }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = displayProfilePicture, onCheckedChange = {
-                        displayProfilePicture = it
-                    })
-                    Text(context.getString(R.string.display_profile_picture))
-                }
-            }
-            item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = fetchProfilePictureOnlyWifi, onCheckedChange = {
-                        fetchProfilePictureOnlyWifi = it
-                    })
-                    Text(context.getString(R.string.fetch_profile_picture_in_only_wifi))
-                }
-            }
         }
         Button(onClick = {
             var valid = true
@@ -171,7 +171,7 @@ fun SettingView(onUpdated : () -> Unit) {
                 valid = false
             } else {
                 val size = fetchSize.toLong()
-                if (size < 10 || size > 100) {
+                if (size < 10 || size > 200) {
                     scope.launch(Dispatchers.Main) {
                         Toast.makeText(context, context.getString(R.string.error_invalid_range_of_fetch_size), Toast.LENGTH_SHORT)
                             .show()
@@ -190,7 +190,7 @@ fun SettingView(onUpdated : () -> Unit) {
                 onUpdated()
             }
         }, content = {
-            Text("Save")
+            Text(context.getString(R.string.save))
         })
     }
 }
