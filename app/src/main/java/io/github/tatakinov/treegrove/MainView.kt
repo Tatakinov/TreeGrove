@@ -15,7 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -30,6 +33,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.pullrefresh.PullRefreshIndicator
 import androidx.compose.material3.pullrefresh.pullRefresh
@@ -138,6 +142,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
             drawerContent = {
                 var doCreateChannel by remember { mutableStateOf(false) }
                 var doChangeProfile by remember { mutableStateOf(false) }
+                var showLicense by remember { mutableStateOf(false) }
                 ModalDrawerSheet(modifier = Modifier.padding(end = 100.dp)) {
                     Row {
                         Button(onClick = {
@@ -208,7 +213,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             profileData.name.contains(searchChannel.toRegex())
                         }
                     }
-                    LazyColumn(state = channelListState) {
+                    LazyColumn(state = channelListState, modifier = Modifier.weight(1f)) {
                         item {
                             Text(context.getString(R.string.relay_connection_status), textAlign = TextAlign.Center, modifier = Modifier
                                 .fillMaxWidth()
@@ -355,6 +360,32 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 }
                             )
                         }
+                    }
+                    Divider()
+                    NavigationDrawerItem(
+                        label = {
+                                Text(context.getString(R.string.about_license), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        },
+                        selected = false,
+                        onClick = { showLicense = true }
+                    )
+                    if (showLicense) {
+                        val scrollState = rememberScrollState()
+                        AlertDialog(onDismissRequest = {
+                            showLicense = false
+                        }, confirmButton = {
+                            TextButton(onClick = {
+                                showLicense = false
+                            }) {
+                                Text(context.getString(R.string.ok))
+                            }
+                        }, title = {
+                            Text(context.getString(R.string.about_license))
+                        }, text = {
+                            Column(modifier = Modifier.verticalScroll(scrollState)) {
+                                Text(context.getString(R.string.license))
+                            }
+                        })
                     }
                 }
                 if (doCreateChannel) {

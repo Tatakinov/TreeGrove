@@ -45,4 +45,5 @@
     <string name="pinned_channel">ピンされたチャンネル</string>
     <string name="unpinned">ピンを外す</string>
     <string name="pinned">ピンする</string>
+    <string name="about_license">ライセンスについて</string>
 </resources>
