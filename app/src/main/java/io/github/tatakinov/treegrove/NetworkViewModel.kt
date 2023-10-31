@@ -24,7 +24,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 
-class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
+class NetworkViewModel : ViewModel() {
     private var _relays = mutableListOf<Relay>()
     private val _mutex  = Mutex()
     private var _channelId = MutableLiveData<String>("")
@@ -59,12 +59,6 @@ class NetworkViewModel : ViewModel(), DefaultLifecycleObserver {
     private val _relayConnectionStatusInternal = mutableMapOf<String, Boolean>()
     private val _relayConnectionStatus = MutableLiveData<Map<String, Boolean>>()
     val relayConnectionStatus : LiveData<Map<String, Boolean>> get() = _relayConnectionStatus
-
-    override fun onResume(owner: LifecycleOwner) {
-        viewModelScope.launch(Dispatchers.IO) {
-            reconnect()
-        }
-    }
 
     private suspend fun connect(config : ConfigRelayData, onConnectFailure: (Relay) -> Unit,
                                 onNewPost : () -> Unit, onNewPosts : () -> Unit,

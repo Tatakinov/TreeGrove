@@ -28,7 +28,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val networkViewModel = NetworkViewModel()
-        lifecycle.addObserver(networkViewModel)
         val connectivityManager = getSystemService(ConnectivityManager::class.java)
         val isWifi = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork)?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
         if (isWifi == null || !isWifi) {
