@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -60,7 +63,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
               onMoveChannel : (String) -> Unit) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    var name = NIP19.encode("npub", Hex.decode(post.pubkey)).take(16) + "..."
+    var name = NIP19.encode("npub", Hex.decode(post.pubkey))
     var url = ""
     var image : ImageBitmap? = null
     var identify = false
@@ -78,9 +81,6 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
         val data    = postProfileData[post.pubkey]!!
         if (data.name.isNotEmpty()) {
             name    = data.name
-            if (name.length > 16) {
-                name    = name.take(16) + "..."
-            }
         }
         if (data.pictureUrl.isNotEmpty()) {
             url = data.pictureUrl
@@ -253,31 +253,56 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                 }
             }
             Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        name,
-                        fontSize = 12.sp,
-                        overflow = TextOverflow.Ellipsis,
-                        maxLines = 2
-                    )
-                    if (identify) {
-                        Image(painterResource(id = R.drawable.verify), contentDescription = context.getString(R.string.verify), modifier = Modifier.height(12.dp))
+                /*
+                名前が短いときは
+                hoge             2000/01/01 00:00:00
+                となり
+                長いときは
+                very_very_lon... 2000/01/01 00:00:00
+                となるようにしたかったが左からsizeが決まるっぽく
+                very_very_long_name 2000/01/01 00...
+                となってしまうので仕方無しに右から決まるようにした。
+                絶対なんかもっとスマートな解決方法があるはず…
+                 */
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        /*
+                        Rtlのままだと
+                        00:00:00 2000/01/01
+                        となるので一時的にLtrに戻す
+                         */
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Text(d, fontSize = 12.sp, maxLines = 1)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (identify) {
+                            Image(painterResource(id = R.drawable.verify), contentDescription = context.getString(R.string.verify), modifier = Modifier.height(12.dp))
+                        }
+                        /*
+                        Rtlのままだと左端が切れるので一時的にLtrに戻す
+                         */
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Text(
+                                name,
+                                fontSize = 12.sp,
+                                overflow = TextOverflow.Ellipsis,
+                                maxLines = 1
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(d, fontSize = 12.sp)
                 }
                 ClickableText(text = annotated, onClick = { offset ->
                     var tapped = false
                     annotated.getStringAnnotations(tag = "image", start = offset, end = offset)
                         .firstOrNull()?.let {
-                        onClickImageURL(it.item)
-                        tapped = true
-                    }
+                            onClickImageURL(it.item)
+                            tapped = true
+                        }
                     annotated.getStringAnnotations(tag = "url", start = offset, end = offset)
                         .firstOrNull()?.let {
-                        uriHandler.openUri(it.item)
-                        tapped = true
-                    }
+                            uriHandler.openUri(it.item)
+                            tapped = true
+                        }
                     annotated.getStringAnnotations(tag = "note", start = offset, end = offset).firstOrNull()?.let {
                         noteReference = it.item
                         tapped = true
