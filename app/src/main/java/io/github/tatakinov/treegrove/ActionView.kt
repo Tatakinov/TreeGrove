@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 
 @Composable
 fun ActionView(modifier : Modifier, onClickGoToTop : () -> Unit, onClickGoToBottom : () -> Unit, onClickOpenPostView : () -> Unit) {
@@ -21,21 +22,21 @@ fun ActionView(modifier : Modifier, onClickGoToTop : () -> Unit, onClickGoToBott
         Button(onClick = {
             onClickGoToTop()
         }, content = {
-            Image(painterResource(id = R.drawable.upward), contentDescription = context.getString(R.string.description_move_to_top), modifier = Modifier
+            Image(painterResource(id = R.drawable.upward), contentDescription = stringResource(R.string.description_move_to_top), modifier = Modifier
                 .width(Const.ACTION_ICON_SIZE)
                 .height(Const.ACTION_ICON_SIZE))
         }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))
         Button(onClick = {
             onClickGoToBottom()
         }, content = {
-            Image(painterResource(id = R.drawable.downward), contentDescription = context.getString(R.string.description_move_to_bottom), modifier = Modifier
+            Image(painterResource(id = R.drawable.downward), contentDescription = stringResource(R.string.description_move_to_bottom), modifier = Modifier
                 .width(Const.ACTION_ICON_SIZE)
                 .height(Const.ACTION_ICON_SIZE))
         }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))
         Button(onClick = {
             onClickOpenPostView()
         }, content = {
-            Image(painterResource(id = R.drawable.edit), contentDescription = context.getString(R.string.description_move_to_post), modifier = Modifier
+            Image(painterResource(id = R.drawable.edit), contentDescription = stringResource(R.string.description_move_to_post), modifier = Modifier
                 .width(Const.ACTION_ICON_SIZE)
                 .height(Const.ACTION_ICON_SIZE))
         }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))

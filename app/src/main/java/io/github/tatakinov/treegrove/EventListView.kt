@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import fr.acinq.secp256k1.Hex
 import io.github.tatakinov.treegrove.nostr.Event
@@ -185,7 +186,7 @@ fun EventListView(onGetPostDataList : () -> List<EventData>,
                 replyEvent  = null
                 doConfirmPost = false
             }) {
-                Text(context.getString(R.string.ok))
+                Text(stringResource(R.string.ok))
             }
         }, dismissButton = {
             TextButton(onClick = {
@@ -193,12 +194,12 @@ fun EventListView(onGetPostDataList : () -> List<EventData>,
                 postMessage = ""
                 doConfirmPost = false
             }) {
-                Text(context.getString(R.string.cancel))
+                Text(stringResource(R.string.cancel))
             }
         }, title = {
-            Text(context.getString(R.string.confirm_title))
+            Text(stringResource(R.string.confirm_title))
         }, text = {
-            Text(context.getString(R.string.confirm_text).format(postMessage))
+            Text(stringResource(R.string.confirm_text).format(postMessage))
         })
     }
     LaunchedEffect(onGetChannelId()) {

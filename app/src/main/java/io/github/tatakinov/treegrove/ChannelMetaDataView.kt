@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,17 +39,17 @@ fun ChannelMetaDataView(title : String, name : String, about : String, picture :
             TextField(value = name, onValueChange = {
                 name = it.replace("\n", "")
             }, label = {
-                Text(context.getString(R.string.name))
+                Text(stringResource(R.string.name))
             }, modifier = Modifier.fillMaxWidth(), maxLines = 1)
             TextField(value = about, onValueChange = {
                 about   = it.replace("\n", "")
             }, label = {
-                Text(context.getString(R.string.about))
+                Text(stringResource(R.string.about))
             }, modifier = Modifier.fillMaxWidth(), maxLines = 1)
             TextField(value = picture, onValueChange = {
                 picture = it.replace("\n", "")
             }, label = {
-                Text(context.getString(R.string.picture_url))
+                Text(stringResource(R.string.picture_url))
             }, modifier = Modifier.fillMaxWidth(), maxLines = 1)
             Row(modifier = Modifier.background(MaterialTheme.colorScheme.background)) {
                 Spacer(modifier = Modifier.weight(1f))
@@ -60,12 +61,12 @@ fun ChannelMetaDataView(title : String, name : String, about : String, picture :
                         onSubmit(name, about, picture)
                     }
                 }, content = {
-                    Image(painterResource(id = R.drawable.send), contentDescription = context.getString(R.string.send), modifier = Modifier.width(Const.ACTION_ICON_SIZE).height(Const.ACTION_ICON_SIZE))
+                    Image(painterResource(id = R.drawable.send), contentDescription = stringResource(R.string.send), modifier = Modifier.width(Const.ACTION_ICON_SIZE).height(Const.ACTION_ICON_SIZE))
                 }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))
                 Button(onClick = {
                     onCancel()
                 }, content = {
-                    Image(painterResource(id = R.drawable.close), contentDescription = context.getString(R.string.cancel), modifier = Modifier.width(Const.ACTION_ICON_SIZE).height(Const.ACTION_ICON_SIZE))
+                    Image(painterResource(id = R.drawable.close), contentDescription = stringResource(R.string.cancel), modifier = Modifier.width(Const.ACTION_ICON_SIZE).height(Const.ACTION_ICON_SIZE))
                 }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background))
             }
         }

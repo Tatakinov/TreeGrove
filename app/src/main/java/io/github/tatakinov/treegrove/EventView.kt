@@ -35,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -276,7 +277,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                         }
                         Spacer(modifier = Modifier.weight(1f))
                         if (identify) {
-                            Image(painterResource(id = R.drawable.verify), contentDescription = context.getString(R.string.verify), modifier = Modifier.height(12.dp))
+                            Image(painterResource(id = R.drawable.verify), contentDescription = stringResource(R.string.verify), modifier = Modifier.height(12.dp))
                         }
                         /*
                         Rtlのままだと左端が切れるので一時的にLtrに戻す
@@ -317,7 +318,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
             expanded = false
         }) {
             DropdownMenuItem(text = {
-                Text(context.getString(R.string.reply))
+                Text(stringResource(R.string.reply))
             }, onClick = {
                 expanded = false
                 if (Config.config.privateKey.isEmpty()) {
@@ -329,22 +330,22 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
             })
             /* TODO 受信部分が未実装
             DropdownMenuItem(text = {
-                Text(context.getString(R.string.hide))
+                Text(stringResource(R.string.hide))
             }, onClick = {
                 expanded = false
                 if (Config.config.privateKey.isEmpty()) {
-                    Toast.makeText(context, context.getString(R.string.error_set_private_key), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, stringResource(R.string.error_set_private_key), Toast.LENGTH_SHORT).show()
                 }
                 else {
                     doHideMessage = true
                 }
             })
             DropdownMenuItem(text = {
-                Text(context.getString(R.string.mute))
+                Text(stringResource(R.string.mute))
             }, onClick = {
                 expanded = false
                 if (Config.config.privateKey.isEmpty()) {
-                    Toast.makeText(context, context.getString(R.string.error_set_private_key), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, stringResource(R.string.error_set_private_key), Toast.LENGTH_SHORT).show()
                 }
                 else {
                     doMuteUser = true
@@ -363,7 +364,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
             }, dismissButton = {
                 dismiss()
             }, title = {
-                Text(context.getString(R.string.hide_title))
+                Text(stringResource(R.string.hide_title))
             }, text = {
                 Text(post.content)
             }
@@ -380,7 +381,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
             }, dismissButton = {
                 dismiss()
             }, title = {
-                Text(context.getString(R.string.mute_title))
+                Text(stringResource(R.string.mute_title))
             }, text = {
                 Text(name)
             }
@@ -438,7 +439,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
             if (event == null) {
                 Dialog(onDismissRequest = onDismiss) {
                     Card {
-                        Text(context.getString(R.string.loading), textAlign = TextAlign.Center)
+                        Text(stringResource(R.string.loading), textAlign = TextAlign.Center)
                     }
                 }
             }
@@ -447,20 +448,20 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                     TextButton(onClick = {
                         onDismiss()
                     }) {
-                        Text(context.getString(R.string.cancel))
+                        Text(stringResource(R.string.cancel))
                     }
                 }, confirmButton = {
                     TextButton(onClick = {
                         onMoveChannel(event.id)
                     }) {
-                        Text(context.getString(R.string.ok))
+                        Text(stringResource(R.string.ok))
                     }
                 }, title = {
-                    Text(context.getString(R.string.move_channel_title))
+                    Text(stringResource(R.string.move_channel_title))
                 }, text = {
                     // MetaDataはeventが存在しているならあるはずなので!!を使っていい
                     val n = onGetChannelMetaData()[event.id]!!.name
-                    Text(context.getString(R.string.description_move_channel).format(n))
+                    Text(stringResource(R.string.description_move_channel).format(n))
                 })
             }
             else {

@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -61,11 +62,11 @@ fun SettingView(onUpdated : () -> Unit) {
         LazyColumn(state = state, modifier = Modifier.weight(1f)) {
             item {
                 TextField(label = {
-                    Text(context.getString(R.string.private_key))
+                    Text(stringResource(R.string.private_key))
                 }, value = privateKey, onValueChange = {
                     privateKey = it.replace("\n", "")
                 }, maxLines = 1, placeholder = {
-                    Text(context.getString(R.string.nsec))
+                    Text(stringResource(R.string.nsec))
                 }, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
             }
             if (privateKey.isEmpty()) {
@@ -73,13 +74,13 @@ fun SettingView(onUpdated : () -> Unit) {
                     Button(onClick = {
                         privateKey = NIP19.encode("nsec", Keys.generatePrivateKey())
                     }, content = {
-                        Text(context.getString(R.string.generate_private_key), textAlign = TextAlign.Center)
+                        Text(stringResource(R.string.generate_private_key), textAlign = TextAlign.Center)
                     }, modifier = Modifier.fillMaxWidth())
                 }
             }
             item {
                 TextField(label = {
-                    Text(context.getString(R.string.fetch_size_description))
+                    Text(stringResource(R.string.fetch_size_description))
                 }, value = fetchSize, onValueChange = {
                     fetchSize = it
                 }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
@@ -89,7 +90,7 @@ fun SettingView(onUpdated : () -> Unit) {
                     Checkbox(checked = displayProfilePicture, onCheckedChange = {
                         displayProfilePicture = it
                     })
-                    Text(context.getString(R.string.display_profile_picture))
+                    Text(stringResource(R.string.display_profile_picture))
                 }
             }
             item {
@@ -97,18 +98,18 @@ fun SettingView(onUpdated : () -> Unit) {
                     Checkbox(checked = fetchProfilePictureOnlyWifi, onCheckedChange = {
                         fetchProfilePictureOnlyWifi = it
                     })
-                    Text(context.getString(R.string.fetch_profile_picture_in_only_wifi))
+                    Text(stringResource(R.string.fetch_profile_picture_in_only_wifi))
                 }
             }
             items(count = relayList.size) { index ->
                 Column {
                     Row {
                         TextField(label = {
-                            Text(context.getString(R.string.relay))
+                            Text(stringResource(R.string.relay))
                         }, value = relayList[index].url, onValueChange = {
                             relayList[index] = relayList[index].copy(url = it.replace("\n", ""))
                         }, placeholder = {
-                            Text(context.getString(R.string.relay_url))
+                            Text(stringResource(R.string.relay_url))
                         }, modifier = Modifier.weight(1f), maxLines = 2,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
                         )
@@ -128,12 +129,12 @@ fun SettingView(onUpdated : () -> Unit) {
                             read    = it
                             relayList[index].read = it
                         })
-                        Text(context.getString(R.string.read))
+                        Text(stringResource(R.string.read))
                         Checkbox(checked = write, onCheckedChange = {
                             write   = it
                             relayList[index].write = it
                         })
-                        Text(context.getString(R.string.write))
+                        Text(stringResource(R.string.write))
                     }
                 }
             }
@@ -141,7 +142,7 @@ fun SettingView(onUpdated : () -> Unit) {
                 Button(onClick = {
                     relayList.add(ConfigRelayData(""))
                 }, content = {
-                    Text(context.getString(R.string.add_relay_server))
+                    Text(stringResource(R.string.add_relay_server))
                 }, modifier = Modifier.fillMaxWidth())
             }
         }
@@ -190,7 +191,7 @@ fun SettingView(onUpdated : () -> Unit) {
                 onUpdated()
             }
         }, content = {
-            Text(context.getString(R.string.save))
+            Text(stringResource(R.string.save))
         })
     }
 }

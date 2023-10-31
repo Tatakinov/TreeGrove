@@ -191,7 +191,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 doCreateChannel = true
                             }
                         }, content = {
-                            Image(painterResource(id = R.drawable.edit), contentDescription = context.getString(R.string.description_create_channel), modifier = Modifier
+                            Image(painterResource(id = R.drawable.edit), contentDescription = stringResource(R.string.description_create_channel), modifier = Modifier
                                 .width(Const.ACTION_ICON_SIZE)
                                 .height(Const.ACTION_ICON_SIZE))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier
@@ -209,7 +209,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 doChangeProfile = true
                             }
                         }, content = {
-                            Image(painterResource(id = R.drawable.person), contentDescription = context.getString(R.string.description_change_profile), modifier = Modifier
+                            Image(painterResource(id = R.drawable.person), contentDescription = stringResource(R.string.description_change_profile), modifier = Modifier
                                 .width(Const.ACTION_ICON_SIZE)
                                 .height(Const.ACTION_ICON_SIZE))
                         }, colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background), modifier = Modifier
@@ -228,7 +228,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     Divider()
                     LazyColumn(state = channelListState, modifier = Modifier.weight(1f)) {
                         item {
-                            Text(context.getString(R.string.relay_connection_status), textAlign = TextAlign.Center, modifier = Modifier
+                            Text(stringResource(R.string.relay_connection_status), textAlign = TextAlign.Center, modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     showRelayConnectionStatus = !showRelayConnectionStatus
@@ -248,10 +248,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                     }, verticalAlignment = Alignment.CenterVertically) {
                                     Text(text = it, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f), maxLines = 1)
                                     if (relayConnectionStatus.value!![it]!!) {
-                                        Image(painterResource(id = R.drawable.ok), contentDescription = context.getString(R.string.ok), modifier = Modifier.height(Const.ICON_SIZE))
+                                        Image(painterResource(id = R.drawable.ok), contentDescription = stringResource(R.string.ok), modifier = Modifier.height(Const.ICON_SIZE))
                                     }
                                     else {
-                                        Image(painterResource(id = R.drawable.close), contentDescription = context.getString(R.string.ng), modifier = Modifier.height(Const.ICON_SIZE))
+                                        Image(painterResource(id = R.drawable.close), contentDescription = stringResource(R.string.ng), modifier = Modifier.height(Const.ICON_SIZE))
                                     }
                                 }
                             }
@@ -260,7 +260,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             }
                         }
                         item {
-                            Text(context.getString(R.string.pinned_channel), textAlign = TextAlign.Center,
+                            Text(stringResource(R.string.pinned_channel), textAlign = TextAlign.Center,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = 10.dp, bottom = 10.dp))
@@ -290,7 +290,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                     expanded = false
                                 }) {
                                     DropdownMenuItem(text = {
-                                        Text(context.getString(R.string.unpinned))
+                                        Text(stringResource(R.string.unpinned))
                                     }, onClick = {
                                         if (Config.config.privateKey.isEmpty()) {
                                             Toast.makeText(
@@ -312,7 +312,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             Divider()
                         }
                         item {
-                            Text(context.getString(R.string.list_of_channel), textAlign = TextAlign.Center, modifier = Modifier
+                            Text(stringResource(R.string.list_of_channel), textAlign = TextAlign.Center, modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = 10.dp, bottom = 10.dp))
                         }
@@ -337,7 +337,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                         expanded = false
                                     }) {
                                         DropdownMenuItem(text = {
-                                            Text(context.getString(R.string.pinned))
+                                            Text(stringResource(R.string.pinned))
                                         }, onClick = {
                                             if (Config.config.privateKey.isEmpty()) {
                                                 Toast.makeText(context, context.getString(R.string.error_set_private_key), Toast.LENGTH_SHORT).show()
@@ -359,7 +359,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         item {
                             NavigationDrawerItem(
                                 label = {
-                                    Text(context.getString(R.string.load_more), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                    Text(stringResource(R.string.load_more), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                                 },
                                 selected = false,
                                 onClick = {
@@ -377,7 +377,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     Divider()
                     NavigationDrawerItem(
                         label = {
-                                Text(context.getString(R.string.about_license), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                                Text(stringResource(R.string.about_license), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
                         },
                         selected = false,
                         onClick = { showLicense = true }
@@ -390,19 +390,19 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             TextButton(onClick = {
                                 showLicense = false
                             }) {
-                                Text(context.getString(R.string.ok))
+                                Text(stringResource(R.string.ok))
                             }
                         }, title = {
-                            Text(context.getString(R.string.about_license))
+                            Text(stringResource(R.string.about_license))
                         }, text = {
                             Column(modifier = Modifier.verticalScroll(scrollState)) {
-                                Text(context.getString(R.string.license))
+                                Text(stringResource(R.string.license))
                             }
                         })
                     }
                 }
                 if (doCreateChannel) {
-                    ChannelMetaDataView(title = context.getString(R.string.description_create_channel),
+                    ChannelMetaDataView(title = stringResource(R.string.description_create_channel),
                         name = "", about = "", picture = "", modifier = Modifier.align(Alignment.TopCenter),
                         onSubmit = { name, about, picture ->
                             scope.launch(Dispatchers.Default) {
@@ -438,7 +438,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         picture = data.pictureUrl
                         nip05 = data.nip05Address
                     }
-                    ProfileMetaDataView(title = context.getString(R.string.description_change_profile),
+                    ProfileMetaDataView(title = stringResource(R.string.description_change_profile),
                         name = name, about = about, picture = picture, nip05 = nip05,
                         modifier = Modifier.align(Alignment.TopCenter),
                         onSubmit = { name, about, picture, nip05 ->
@@ -474,7 +474,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         expandedChannelAbout = !expandedChannelAbout
                     }, verticalAlignment = Alignment.CenterVertically) {
                         Image(painterResource(R.drawable.menu),
-                            context.getString(R.string.menu),
+                            stringResource(R.string.menu),
                             modifier = Modifier
                                 .width(Const.ICON_SIZE)
                                 .height(Const.ICON_SIZE)
@@ -556,12 +556,12 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 horizontalAlignment = Alignment.CenterHorizontally) {
                                 Image(
                                     painterResource(id = R.drawable.swipe_right),
-                                    contentDescription = context.getString(R.string.description_swipe_to_open_menu),
+                                    contentDescription = stringResource(R.string.description_swipe_to_open_menu),
                                     modifier = Modifier
                                         .height(Const.ACTION_ICON_SIZE * 2)
                                         .fillMaxWidth()
                                 )
-                                Text(text = context.getString(R.string.description_swipe_to_open_menu), textAlign = TextAlign.Center,
+                                Text(text = stringResource(R.string.description_swipe_to_open_menu), textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth())
                             }
                         }
@@ -645,10 +645,10 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                 Card {
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (image.value == null || image.value!!.status == DataStatus.Loading) {
-                            Text(text = context.getString(R.string.loading), modifier = Modifier.align(
+                            Text(text = stringResource(R.string.loading), modifier = Modifier.align(
                                 Alignment.Center))
                         } else if (image.value!!.status == DataStatus.Invalid) {
-                            Text(text = context.getString(R.string.invalid_image), modifier = Modifier.align(
+                            Text(text = stringResource(R.string.invalid_image), modifier = Modifier.align(
                                 Alignment.Center))
                         } else if (image.value!!.status == DataStatus.Valid) {
                             val data = image.value!!.data!!
