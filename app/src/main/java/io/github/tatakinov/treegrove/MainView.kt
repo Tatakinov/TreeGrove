@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,7 +91,6 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
     var expandedChannelAbout by remember {
         mutableStateOf(false)
     }
-    var searchChannel by remember { mutableStateOf("") }
     val manager = LocalFocusManager.current
     var showRelayConnectionStatus by remember { mutableStateOf(false) }
     val relayConnectionStatus = networkViewModel.relayConnectionStatus.observeAsState()
@@ -145,6 +145,25 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                 var doCreateChannel by remember { mutableStateOf(false) }
                 var doChangeProfile by remember { mutableStateOf(false) }
                 var showLicense by remember { mutableStateOf(false) }
+                var searchChannel by remember { mutableStateOf("") }
+                val pinnedChannels = if (searchChannel.isEmpty()) {
+                    pinnedChannelList.value!!
+                }
+                else {
+                    pinnedChannelList.value!!.filter {
+                        val profileData = channelMetaData.value!![it]!!
+                        profileData.name.contains(searchChannel.toRegex())
+                    }
+                }
+                val channels = if (searchChannel.isEmpty()) {
+                    channelDataList.value!!
+                }
+                else {
+                    channelDataList.value!!.filter {
+                        val profileData = channelMetaData.value!![it.event.id]!!
+                        profileData.name.contains(searchChannel.toRegex())
+                    }
+                }
                 ModalDrawerSheet(modifier = Modifier.padding(end = 100.dp)) {
                     Row {
                         Button(onClick = {
@@ -198,23 +217,15 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                     }
                     Divider()
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(painterResource(id = R.drawable.search), contentDescription = context.getString(R.string.search), modifier = Modifier
-                            .height(Const.ACTION_ICON_SIZE)
-                            .width(Const.ACTION_ICON_SIZE))
+                        Image(painterResource(id = R.drawable.search), contentDescription = null, modifier = Modifier.height(Const.ACTION_ICON_SIZE))
                         TextField(value = searchChannel, onValueChange = {
                             searchChannel = it.replace("\n", "")
-                        }, maxLines = 1, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+                        }, maxLines = 1, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            placeholder = {
+                                Text(stringResource(id = R.string.search_channel))
+                            })
                     }
                     Divider()
-                    val list = if (searchChannel.isEmpty()) {
-                        channelDataList.value!!
-                    }
-                    else {
-                        channelDataList.value!!.filter {
-                            val profileData = channelMetaData.value!![it.event.id]!!
-                            profileData.name.contains(searchChannel.toRegex())
-                        }
-                    }
                     LazyColumn(state = channelListState, modifier = Modifier.weight(1f)) {
                         item {
                             Text(context.getString(R.string.relay_connection_status), textAlign = TextAlign.Center, modifier = Modifier
@@ -257,7 +268,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         item {
                             Divider()
                         }
-                        items(items = pinnedChannelList.value!!, key = { it }) {
+                        items(items = pinnedChannels, key = { it }) {
                             var expanded by remember { mutableStateOf(false) }
                             val metaData = if (channelMetaData.value!!.contains(it)) {
                                 channelMetaData.value!![it]!!
@@ -308,7 +319,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         item {
                             Divider()
                         }
-                        items(items = list, key = { it.event.toJSONObject().toString() }) {
+                        items(items = channels, key = { it.event.toJSONObject().toString() }) {
                             if (channelMetaData.value!!.contains(it.event.id)) {
                                 var expanded by remember { mutableStateOf(false) }
                                 val metaData = channelMetaData.value!![it.event.id]!!

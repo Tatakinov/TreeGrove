@@ -57,6 +57,7 @@
     <string name="pinned">Pinned</string>
     <string name="save">Save</string>
     <string name="about_license">About license</string>
+    <string name="search_channel">Channel name / nevent</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

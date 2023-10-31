@@ -47,4 +47,5 @@
     <string name="pinned">ピンする</string>
     <string name="save">保存</string>
     <string name="about_license">ライセンスについて</string>
+    <string name="search_channel">チャンネル名 / nevent</string>
 </resources>
