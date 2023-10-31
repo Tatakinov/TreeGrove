@@ -58,7 +58,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3:1.1.2")
     implementation("fr.acinq.secp256k1:secp256k1-kmp-jni-android:0.10.1")
     implementation("com.squareup.okhttp3:okhttp:4.10.0")
     implementation("androidx.navigation:navigation-compose:2.5.3")
