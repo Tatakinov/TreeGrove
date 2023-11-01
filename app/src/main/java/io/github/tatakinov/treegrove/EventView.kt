@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.ClickableText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
@@ -465,21 +467,24 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                 })
             }
             else {
+                val scrollState = rememberScrollState()
                 Dialog(onDismissRequest = onDismiss) {
                     Card {
-                        EventView(
-                            post = event,
-                            onGetEventMap = onGetEventMap,
-                            onGetChannelMetaData = onGetChannelMetaData,
-                            onGetUserMetaData = onGetUserMetaData,
-                            onClickImageURL = onClickImageURL,
-                            onUserNotFound = onUserNotFound,
-                            onEventNotFound = onEventNotFound,
-                            onReply = {},
-                            onHide = {},
-                            onMute = {},
-                            onMoveChannel = onMoveChannel
-                        )
+                        Column(modifier = Modifier.verticalScroll(scrollState)) {
+                            EventView(
+                                post = event,
+                                onGetEventMap = onGetEventMap,
+                                onGetChannelMetaData = onGetChannelMetaData,
+                                onGetUserMetaData = onGetUserMetaData,
+                                onClickImageURL = onClickImageURL,
+                                onUserNotFound = onUserNotFound,
+                                onEventNotFound = onEventNotFound,
+                                onReply = {},
+                                onHide = {},
+                                onMute = {},
+                                onMoveChannel = onMoveChannel
+                            )
+                        }
                     }
                 }
             }
