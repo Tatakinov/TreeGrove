@@ -90,6 +90,10 @@ class Event(val kind : Int, val content : String, val createdAt : Long, val pubk
         }
     }
 
+    override fun hashCode(): Int {
+        return toJSONObject().toString().hashCode()
+    }
+
     companion object {
         const val KIND = "kind"
         const val CONTENT = "content"

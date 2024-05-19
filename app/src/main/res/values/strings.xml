@@ -58,6 +58,11 @@
     <string name="save">Save</string>
     <string name="about_license">About license</string>
     <string name="search_channel">Channel name / nevent</string>
+    <string name="save_config">Saved.</string>
+    <string name="home">Home</string>
+    <string name="post_to_own">post to own</string>
+    <string name="post_to_other">reply to: %s</string>
+    <string name="post_to_channel">post to channel: %s</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

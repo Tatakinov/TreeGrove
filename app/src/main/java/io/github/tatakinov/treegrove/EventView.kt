@@ -85,12 +85,6 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
         if (data.name.isNotEmpty()) {
             name    = data.name
         }
-        if (data.pictureUrl.isNotEmpty()) {
-            url = data.pictureUrl
-        }
-        if (data.image.status == DataStatus.Valid) {
-            image   = data.image.data
-        }
         if (data.nip05.status == DataStatus.Valid) {
             identify = data.nip05.data!!
         }

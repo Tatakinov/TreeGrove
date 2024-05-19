@@ -48,4 +48,9 @@
     <string name="save">保存</string>
     <string name="about_license">ライセンスについて</string>
     <string name="search_channel">チャンネル名 / nevent</string>
+    <string name="save_config">保存しました</string>
+    <string name="home">ホーム</string>
+    <string name="post_to_own">投稿</string>
+    <string name="post_to_other">%sにリプライ</string>
+    <string name="post_to_channel">チャンネル %s に投稿</string>
 </resources>

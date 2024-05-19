@@ -38,23 +38,6 @@ fun DrawerMenuItem(metaData : MetaData, onClick : () -> Unit, onLongPress : () -
         )
     }, verticalAlignment = Alignment.CenterVertically) {
         if (Config.config.displayProfilePicture) {
-            if (metaData.image.status != DataStatus.Valid) {
-                Image(
-                    painterResource(id = R.drawable.no_image),
-                    contentDescription = "no image",
-                    modifier = Modifier
-                        .width(Const.ICON_SIZE)
-                        .height(Const.ICON_SIZE)
-                )
-            } else {
-                Image(
-                    metaData.image.data!!,
-                    contentDescription = metaData.name,
-                    modifier = Modifier
-                        .width(Const.ICON_SIZE)
-                        .height(Const.ICON_SIZE)
-                )
-            }
         }
         Text(metaData.name, modifier = Modifier.padding(start = 10.dp)
             , maxLines = 2, overflow = TextOverflow.Clip)

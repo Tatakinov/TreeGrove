@@ -274,7 +274,7 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                                 channelMetaData.value!![it]!!
                             }
                             else {
-                                MetaData(0, it)
+                                MetaData("")
                             }
                             Box {
                                 DrawerMenuItem(metaData = metaData, onClick = {
@@ -435,7 +435,6 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                         val data = userMetaData.value!![Config.config.getPublicKey()]!!
                         name = data.name
                         about = data.about
-                        picture = data.pictureUrl
                         nip05 = data.nip05Address
                     }
                     ProfileMetaDataView(title = stringResource(R.string.description_change_profile),
@@ -495,9 +494,6 @@ fun MainView(onNavigate : () -> Unit, networkViewModel: NetworkViewModel = viewM
                             }
                             if (data.about.isNotEmpty()) {
                                 channelAbout = data.about
-                            }
-                            if (data.image.status == DataStatus.Valid) {
-                                channelImage = data.image.data
                             }
                         }
                         if (Config.config.displayProfilePicture) {

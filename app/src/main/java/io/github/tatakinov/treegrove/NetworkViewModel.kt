@@ -365,14 +365,10 @@ class NetworkViewModel : ViewModel() {
                     val nip05 = json.optString(MetaData.NIP05, "")
                     val map = _userMetaDataInternal
                     if (map.contains(event.pubkey)) {
-                        if (map[event.pubkey]!!.createdAt < event.createdAt) {
-                            map[event.pubkey] =
-                                MetaData(event.createdAt, name, about, picture, nip05Address = nip05)
-                        }
                     }
                     else {
                         map[event.pubkey] =
-                            MetaData(event.createdAt, name, about, picture, nip05Address = nip05)
+                            MetaData(name, about, nip05Address = nip05)
                     }
                     // fetch image
                     if (picture.isNotEmpty()) {
@@ -406,14 +402,8 @@ class NetworkViewModel : ViewModel() {
                         val picture = json.optString(MetaData.PICTURE, "")
                         val map = _channelMetaDataInternal
                         if (map.contains(event.id)) {
-                            if (map[event.id]!!.createdAt < event.createdAt) {
-                                map[event.id]   =
-                                    MetaData(event.createdAt, name, about, picture)
-                            }
                         }
                         else {
-                            map[event.id] =
-                                MetaData(event.createdAt, name, about, picture)
                         }
                         if (picture.isNotEmpty()) {
                             fetchProfileImage(picture, dest = _channelMetaData, internal = map, pubkey = event.id)
@@ -459,21 +449,6 @@ class NetworkViewModel : ViewModel() {
                     val picture = json.optString(MetaData.PICTURE, "")
                     val map = _channelMetaDataInternal
                     var isChanged = true
-                    if (map.contains(id)) {
-                        if (map[id]!!.pictureUrl == picture) {
-                            isChanged = false
-                        }
-                        if (map[id]!!.createdAt < event.createdAt) {
-                            map[id] = MetaData(event.createdAt, name, about, picture)
-                        }
-                    }
-                    else {
-                        map[id] = MetaData(event.createdAt, name, about, picture)
-                    }
-                    if (picture.isNotEmpty() && isChanged) {
-                        map[id]!!.image = map[id]!!.image.copy(status = DataStatus.NotLoading, data = null)
-                        fetchProfileImage(picture, dest = _channelMetaData, internal = map, pubkey = id)
-                    }
                 }
                 // エラーは出さず受信したイベントを無視する
                 catch (_: JSONException) {
@@ -742,9 +717,6 @@ class NetworkViewModel : ViewModel() {
                     _userMetaDataInternal.contains(it)
                 }.forEach {
                     val data = _userMetaDataInternal[it]!!
-                    if (data.pictureUrl.isNotEmpty() && data.image.status == DataStatus.NotLoading) {
-                        fetchProfileImage(data.pictureUrl, dest = _userMetaData, internal = _userMetaDataInternal, pubkey = it)
-                    }
                     if (data.nip05Address.isNotEmpty() && data.nip05.status == DataStatus.NotLoading) {
                         fetchProfileIdentify(data.nip05Address, pubkey = it)
                     }
@@ -823,14 +795,8 @@ class NetworkViewModel : ViewModel() {
             reconnect()
             if (state == NetworkState.Wifi) {
                 for ((k, v) in _channelMetaDataInternal) {
-                    if (v.pictureUrl.isNotEmpty()) {
-                        fetchProfileImage(v.pictureUrl, _channelMetaData, _channelMetaDataInternal, k)
-                    }
                 }
                 for ((k, v) in _userMetaDataInternal) {
-                    if (v.pictureUrl.isNotEmpty()) {
-                        fetchProfileImage(v.pictureUrl, _userMetaData, _userMetaDataInternal, k)
-                    }
                 }
             }
         }
@@ -843,22 +809,7 @@ class NetworkViewModel : ViewModel() {
         }
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock {
-                if (internal[pubkey]!!.image.status != DataStatus.NotLoading) {
-                    return@withLock
-                }
-                internal[pubkey]!!.image = internal[pubkey]!!.image.copy(status = DataStatus.Loading)
                 val refresh : (DataStatus, ImageBitmap?) -> Unit = { status, image ->
-                    viewModelScope.launch(Dispatchers.Default) {
-                        _mutex.withLock {
-                            internal[pubkey]!!.image = internal[pubkey]!!.image.copy(status = status, data = image)
-                            val map = mutableMapOf<String, MetaData>().apply {
-                                for ((k, v) in internal) {
-                                    put(k, v.copy())
-                                }
-                            }
-                            dest.postValue(map)
-                        }
-                    }
                 }
                 viewModelScope.launch(Dispatchers.IO) {
                     fetch(url, onSuccess = { data ->

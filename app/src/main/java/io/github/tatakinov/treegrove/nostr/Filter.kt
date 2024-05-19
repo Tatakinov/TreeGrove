@@ -10,7 +10,7 @@ data class Filter(
     val tags : Map<String, List<String>>    = mapOf(),
     val since : Long    = 0,
     val until : Long    = 0,
-    val limit : Long    = 0
+    val limit : Long    = -1
     ) {
     fun toJSONObject() : JSONObject {
         val obj = JSONObject()
@@ -48,7 +48,7 @@ data class Filter(
         if (until > 0) {
             obj.put("until", until)
         }
-        if (limit > 0) {
+        if (limit >= 0) {
             obj.put("limit", limit)
         }
         return obj
@@ -60,5 +60,52 @@ data class Filter(
         } else {
             false
         }
+    }
+
+    fun cond(e: Event): Boolean {
+        if (ids.isNotEmpty()) {
+            if (ids.none { it == e.id }) {
+                return false
+            }
+        }
+        if (authors.isNotEmpty()) {
+            if (authors.none { it == e.pubkey }) {
+                return false
+            }
+        }
+        if (kinds.isNotEmpty()) {
+            if (kinds.none { it == e.kind }) {
+                return false
+            }
+        }
+        if (tags.isNotEmpty()) {
+            for ((k, v) in tags) {
+                if (v.none {
+                    for (tag in e.tags) {
+                        if (tag.size < 2) {
+                            return false
+                        } else {
+                            if (tag[0] == k) {
+                                return tag[1] == it
+                            }
+                        }
+                    }
+                        return false
+                    }) {
+                    return false
+                }
+            }
+        }
+        if (since > 0) {
+            if (e.createdAt < since) {
+                return false
+            }
+        }
+        if (until > 0) {
+            if (e.createdAt > until) {
+                return false
+            }
+        }
+        return true
     }
 }
