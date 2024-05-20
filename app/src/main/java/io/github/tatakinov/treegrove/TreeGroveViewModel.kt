@@ -221,7 +221,6 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         for (relay in _relayList) {
             relay.sendOneShot(filter, onReceive)
         }
-        Log.d("debug", "addOneShot")
     }
 
     fun subscribeStreamEvent(filter: Filter): StateFlow<List<Event>> {
@@ -229,7 +228,6 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             _streamEventCache[filter] = MutableStateFlow(listOf())
         }
         viewModelScope.launch {
-            Log.d("debug", "subscribe")
             addStream(filter.copy(limit = 0))
         }
         return _streamEventCache[filter]!!
@@ -258,6 +256,95 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         }
     }
 
+    private suspend fun fetchNIP05(eventCache: MutableStateFlow<LoadingData<ReplaceableEvent>>, username: String, domain: String, pubKey: String) = withContext(Dispatchers.IO) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _downloader.get(
+                NIP05.generateIdentifyURL(
+                    domain,
+                    username
+                ),
+                allowRedirect = false,
+                onReceive = { url, data ->
+                    viewModelScope.launch {
+                        _mutex.withLock {
+                            if (data is LoadingData.Valid) {
+                                try {
+                                    val json =
+                                        JSONObject(String(data.data))
+                                    val names =
+                                        json.getJSONObject(
+                                            NIP05.NAMES
+                                        )
+                                    if (names.getString(username) == pubKey) {
+                                        val value =
+                                            eventCache.value
+                                        if (value is LoadingData.Valid) {
+                                            val d =
+                                                value.data
+                                            if (d is ReplaceableEvent.MetaData) {
+                                                eventCache.update {
+                                                    LoadingData.Valid(
+                                                        d.copy(
+                                                            nip05 = d.nip05.copy(
+                                                                identify = LoadingData.Valid(
+                                                                    true
+                                                                )
+                                                            )
+                                                        )
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (e: JSONException) {
+                                    val value =
+                                        eventCache.value
+                                    if (value is LoadingData.Valid) {
+                                        val d =
+                                            value.data
+                                        if (d is ReplaceableEvent.MetaData) {
+                                            eventCache.update {
+                                                LoadingData.Valid(
+                                                    d.copy(
+                                                        nip05 = d.nip05.copy(
+                                                            identify = LoadingData.Invalid(
+                                                                LoadingData.Reason.ParseError
+                                                            )
+                                                        )
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (data is LoadingData.Invalid) {
+                                val value =
+                                    eventCache.value
+                                if (value is LoadingData.Valid) {
+                                    val d = value.data
+                                    if (d is ReplaceableEvent.MetaData) {
+                                        eventCache.update {
+                                            LoadingData.Valid(
+                                                d.copy(
+                                                    nip05 = d.nip05.copy(
+                                                        identify = LoadingData.Invalid(
+                                                            data.reason
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                // unreachable
+                            }
+                        }
+                    }
+                })
+        }
+    }
+
     fun subscribeReplaceableEvent(filter: Filter): StateFlow<LoadingData<ReplaceableEvent>> {
         if (!_replaceableEventCache.containsKey(filter)) {
             _replaceableEventCache[filter] = MutableStateFlow(LoadingData.NotLoading())
@@ -266,7 +353,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         if (eventCache.value is LoadingData.NotLoading) {
             eventCache.update { LoadingData.Loading() }
             viewModelScope.launch {
-                addOneShot(filter, onReceive = { eventList ->
+                addOneShot(filter.copy(limit = 1), onReceive = { eventList ->
                     viewModelScope.launch {
                         _mutex.withLock {
                             if (eventList.isNotEmpty()) {
@@ -277,6 +364,19 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                         _mutex.withLock {
                                             if (r != null) {
                                                 eventCache.update { LoadingData.Valid(r) }
+                                                if (r is ReplaceableEvent.MetaData && r.nip05.domain.isNotEmpty()) {
+                                                    val match = NIP05.ADDRESS_REGEX.find(r.nip05.domain)
+                                                    match?.let {
+                                                        viewModelScope.launch {
+                                                            fetchNIP05(
+                                                                eventCache,
+                                                                match.groups[1]!!.value,
+                                                                match.groups[2]!!.value,
+                                                                e.pubkey
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             } else {
                                                 eventCache.update { LoadingData.Invalid(LoadingData.Reason.ParseError) }
                                             }
@@ -289,89 +389,16 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                         if (r != null) {
                                             eventCache.update { LoadingData.Valid(r) }
                                             if (r is ReplaceableEvent.MetaData && r.nip05.domain.isNotEmpty()) {
-                                                viewModelScope.launch(Dispatchers.IO) {
-                                                    _downloader.get(
-                                                        NIP05.generateIdentifyURL(
-                                                            r.nip05.domain,
-                                                            r.name
-                                                        ),
-                                                        allowRedirect = false,
-                                                        onReceive = { url, data ->
-                                                            viewModelScope.launch {
-                                                                _mutex.withLock {
-                                                                    if (data is LoadingData.Valid) {
-                                                                        try {
-                                                                            val json =
-                                                                                JSONObject(data.toString())
-                                                                            val names =
-                                                                                json.getJSONObject(
-                                                                                    NIP05.NAMES
-                                                                                )
-                                                                            if (names.getString(r.name) == e.pubkey) {
-                                                                                val value =
-                                                                                    eventCache.value
-                                                                                if (value is LoadingData.Valid) {
-                                                                                    val d =
-                                                                                        value.data
-                                                                                    if (d is ReplaceableEvent.MetaData) {
-                                                                                        eventCache.update {
-                                                                                            LoadingData.Valid(
-                                                                                                d.copy(
-                                                                                                    nip05 = d.nip05.copy(
-                                                                                                        identify = LoadingData.Valid(
-                                                                                                            true
-                                                                                                        )
-                                                                                                    )
-                                                                                                )
-                                                                                            )
-                                                                                        }
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        } catch (e: JSONException) {
-                                                                            val value =
-                                                                                eventCache.value
-                                                                            if (value is LoadingData.Valid) {
-                                                                                val d = value.data
-                                                                                if (d is ReplaceableEvent.MetaData) {
-                                                                                    eventCache.update {
-                                                                                        LoadingData.Valid(
-                                                                                            d.copy(
-                                                                                                nip05 = d.nip05.copy(
-                                                                                                    identify = LoadingData.Invalid(
-                                                                                                        LoadingData.Reason.ParseError
-                                                                                                    )
-                                                                                                )
-                                                                                            )
-                                                                                        )
-                                                                                    }
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    } else if (data is LoadingData.Invalid) {
-                                                                        val value = eventCache.value
-                                                                        if (value is LoadingData.Valid) {
-                                                                            val d = value.data
-                                                                            if (d is ReplaceableEvent.MetaData) {
-                                                                                eventCache.update {
-                                                                                    LoadingData.Valid(
-                                                                                        d.copy(
-                                                                                            nip05 = d.nip05.copy(
-                                                                                                identify = LoadingData.Invalid(
-                                                                                                    data.reason
-                                                                                                )
-                                                                                            )
-                                                                                        )
-                                                                                    )
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    } else {
-                                                                        // unreachable
-                                                                    }
-                                                                }
-                                                            }
-                                                        })
+                                                val match = NIP05.ADDRESS_REGEX.find(r.nip05.domain)
+                                                match?.let {
+                                                    viewModelScope.launch {
+                                                        fetchNIP05(
+                                                            eventCache,
+                                                            match.groups[1]!!.value,
+                                                            match.groups[2]!!.value,
+                                                            e.pubkey
+                                                        )
+                                                    }
                                                 }
                                             }
                                         } else if (eventCache.value is LoadingData.Loading) {

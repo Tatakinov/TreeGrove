@@ -63,6 +63,8 @@
     <string name="post_to_own">post to own</string>
     <string name="post_to_other">reply to: %s</string>
     <string name="post_to_channel">post to channel: %s</string>
+    <string name="follow_self">follow self</string>
+    <string name="follow_someone">follow someone</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

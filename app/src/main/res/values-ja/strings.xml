@@ -53,4 +53,6 @@
     <string name="post_to_own">投稿</string>
     <string name="post_to_other">%sにリプライ</string>
     <string name="post_to_channel">チャンネル %s に投稿</string>
+    <string name="follow_self">自分をフォローする</string>
+    <string name="follow_someone">誰かをフォローしてください</string>
 </resources>

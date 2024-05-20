@@ -33,8 +33,10 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -109,6 +111,7 @@ import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
 import io.github.tatakinov.treegrove.ui.theme.TreeGroveTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -154,10 +157,17 @@ fun Main(viewModel: TreeGroveViewModel) {
             }, onNavigatePost = { s ->
                 screen = s
                 navController.navigate("post")
+            }, onNavigateProfile = {
+                navController.navigate("profile")
             })
         }
         composable("setting") {
             Setting(viewModel)
+        }
+        composable("profile") {
+            Profile(viewModel, onNavigate = {
+                navController.popBackStack()
+            })
         }
         composable("post") {
             Post(viewModel, screen, onNavigate = {
@@ -177,13 +187,12 @@ sealed class Screen(val icon : ImageVector) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigatePost: (Screen) -> Unit) {
+fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigatePost: (Screen) -> Unit, onNavigateProfile: () -> Unit) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val publicKey by viewModel.publicKeyFlow.collectAsState()
     val relayConfigList by viewModel.relayConfigListFlow.collectAsState()
     val tabList by viewModel.getTabListFlow().collectAsState()
-    Log.d("debug", "SSsize: " + tabList.size)
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabList.size })
     val filter = Filter(kinds = listOf(Kind.ChannelCreation.num))
     Scaffold(floatingActionButton = {
@@ -199,7 +208,6 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
         ModalNavigationDrawer(drawerState = drawerState, drawerContent = {
             val relayInfoList by viewModel.relayInfoListFlow.collectAsState()
             val channelList by viewModel.subscribeStreamEvent(filter).collectAsState()
-            Log.d("debug", "size: " + channelList.size)
             ModalDrawerSheet(modifier = Modifier.padding(end = 100.dp)) {
                 val listState = rememberLazyListState()
                 LazyColumn(state = listState) {
@@ -211,14 +219,20 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                         drawerState.close()
                                     }
                                     onNavigateSetting()
-                                },
-                                content = {
-                                    Icon(Icons.Filled.Settings, "setting")
-                                },
-                                colors = ButtonDefaults.buttonColors(MaterialTheme.colorScheme.background),
-                                modifier = Modifier
-                                    .weight(1f)
-                            )
+                                }
+                            ) {
+                                Icon(Icons.Filled.Settings, "setting")
+                            }
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        drawerState.close()
+                                    }
+                                    onNavigateProfile()
+                                }
+                            ) {
+                                Icon(Icons.Filled.Person, "profile")
+                            }
                         }
                     }
                     item {
@@ -325,7 +339,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                     .weight(1f), userScrollEnabled = false) { index ->
                     when (val screen = tabList[index]) {
                         is Screen.OwnTimeline -> {
-                            Text("WIP OwnTimeline")
+                            OwnTimeline(viewModel, screen.id)
                         }
                         is Screen.Timeline -> {
                             Text("WIP Timeline")
@@ -392,7 +406,6 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event) {
     val date = Date(event.createdAt * 1000)
     val format = SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
     val d   = format.format(date)
-    var identify = false
     val metaDataState = viewModel.subscribeReplaceableEvent(Filter(authors = listOf(event.pubkey), kinds = listOf(Kind.Metadata.num))).collectAsState()
     var i = 0
     while (i < event.content.length) {
@@ -573,8 +586,9 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event) {
                     Text(d, fontSize = 12.sp, maxLines = 1)
                 }
                 Spacer(modifier = Modifier.weight(1f))
-                if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                    Icon(Icons.Filled.CheckCircle, "", modifier = Modifier.height(12.dp))
+                if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData &&
+                    m.data.nip05.identify is LoadingData.Valid && m.data.nip05.identify.data) {
+                    Icon(Icons.Filled.CheckCircle, "verified", modifier = Modifier.height(12.dp))
                 }
                 /*
                 Rtlのままだと左端が切れるので一時的にLtrに戻す
@@ -610,6 +624,30 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event) {
                 TODO("stub")
             }
         }, style = TextStyle(color = contentColorFor(MaterialTheme.colorScheme.background)))
+    }
+}
+
+@Composable
+fun OwnTimeline(viewModel: TreeGroveViewModel, id: String) {
+    val followFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(id))
+    val followList by viewModel.subscribeReplaceableEvent(followFilter).collectAsState()
+    val list = followList
+    if (list is LoadingData.Valid && list.data is ReplaceableEvent.Contacts && list.data.list.isNotEmpty()) {
+        val contacts = list.data.list
+        val eventFilter = Filter(kinds = listOf(Kind.Text.num), authors = contacts.map { it[ReplaceableEvent.Contacts.Key.key]!!})
+        val eventList by viewModel.subscribeStreamEvent(eventFilter).collectAsState()
+        val listState = rememberLazyListState()
+        LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
+            items(items = eventList, key = { it.toJSONObject().toString() }) { event ->
+                Event1(viewModel, event = event)
+            }
+        }
+        LaunchedEffect(id) {
+            viewModel.fetchPastPost(eventFilter)
+        }
+    }
+    else {
+        Text(stringResource(id = R.string.follow_someone))
     }
 }
 
@@ -658,7 +696,6 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, onNavigate: () -> Unit) 
         }, text = {
             Column {
                 val m = metaData
-                Log.d("debug", "m is Valid:" + m)
                 when (screen) {
                     is Screen.OwnTimeline -> {
                         if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
@@ -731,6 +768,182 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, onNavigate: () -> Unit) 
 }
 
 @Composable
+fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val privateKey by viewModel.privateKeyFlow.collectAsState()
+    val publicKey by viewModel.publicKeyFlow.collectAsState()
+
+    if (publicKey.isNotEmpty()) {
+        val (_, pubData) = NIP19.decode(publicKey)
+        val pub = Hex.encode(pubData)
+        val metaDataFilter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(pub))
+        val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
+        val contactsFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub))
+        val contacts by viewModel.subscribeReplaceableEvent(contactsFilter).collectAsState()
+        var name by remember { mutableStateOf("") }
+        var about by remember { mutableStateOf("") }
+        var picture by remember { mutableStateOf("") }
+        var nip05 by remember { mutableStateOf("") }
+        val list = remember { mutableStateListOf<Map<String, String>>() }
+        val listState = rememberLazyListState()
+
+        Column(modifier = Modifier.fillMaxHeight()) {
+            LazyColumn(state = listState, modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()) {
+                item {
+                    TextField(label = {
+                        Text(stringResource(id = R.string.name))
+                    }, value = name, onValueChange = {
+                        name = it.replace("\n", "")
+                    }, modifier = Modifier.fillMaxWidth(),
+                        maxLines = 1, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+                }
+                item {
+                    TextField(label = {
+                        Text(stringResource(id = R.string.about))
+                    }, value = about, onValueChange = {
+                        about = it
+                    })
+                }
+                item {
+                    TextField(label = {
+                        Text(stringResource(id = R.string.picture_url))
+                    }, value = picture, onValueChange = {
+                        picture = it.replace("\n", "")
+                    }, maxLines = 1, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+                }
+                item {
+                    TextField(label = {
+                        Text(stringResource(id = R.string.nip05_address))
+                    }, value = nip05, onValueChange = {
+                        nip05 = it.replace("\n", "")
+                    }, maxLines = 1, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+                }
+                item {
+                    HorizontalDivider()
+                }
+                if (list.isEmpty()) {
+                    item {
+                        Button(onClick = {
+                            if (list.isEmpty()) {
+                                list.add(
+                                    mapOf(
+                                        ReplaceableEvent.Contacts.Key.key to pub,
+                                        ReplaceableEvent.Contacts.Key.relay to ""
+                                    )
+                                )
+                            }
+                        }) {
+                            Text(stringResource(id = R.string.follow_self))
+                        }
+                    }
+                }
+                items(items = list, key = { it[ReplaceableEvent.Contacts.Key.key]!! }) {
+                    val pubKey = it[ReplaceableEvent.Contacts.Key.key]!!
+                    val filter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(pubKey))
+                    val meta by viewModel.subscribeReplaceableEvent(filter).collectAsState()
+                    val m = meta
+                    val n = if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                        m.data.name
+                    } else {
+                        pubKey
+                    }
+                    Row {
+                        Text(modifier = Modifier.weight(1f), text = n)
+                        Button(onClick = {
+                            list.remove(it)
+                        }) {
+                            Icon(Icons.Filled.Delete, "delete")
+                        }
+                    }
+                }
+            }
+            if (privateKey.isNotEmpty()) {
+                Button(onClick = {
+                    val (_, privData) = NIP19.decode(privateKey)
+                    val priv = Hex.encode(privData)
+                    val json = JSONObject()
+                    json.put("name", name)
+                    json.put("about", about)
+                    json.put("picture", picture)
+                    json.put("nip05", nip05)
+                    val metaDataEvent = Event(
+                        kind = Kind.Metadata.num,
+                        content = json.toString(),
+                        createdAt = System.currentTimeMillis() / 1000,
+                        pubkey = pub
+                    )
+                    metaDataEvent.id = Event.generateHash(metaDataEvent, false)
+                    metaDataEvent.sig = Event.sign(metaDataEvent, priv)
+                    viewModel.post(metaDataEvent, onSuccess = {}, onFailure = { url, reason ->
+                        coroutineScope.launch(Dispatchers.Main) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.error_failed_to_post),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    })
+                    val tags = mutableListOf<List<String>>()
+                    for (tag in list) {
+                        tags.add(
+                            listOf(
+                                "p",
+                                tag[ReplaceableEvent.Contacts.Key.key] ?: "",
+                                tag[ReplaceableEvent.Contacts.Key.relay] ?: "",
+                                tag[ReplaceableEvent.Contacts.Key.petname] ?: ""
+                            )
+                        )
+                    }
+                    val contactsEvent = Event(
+                        kind = Kind.Contacts.num,
+                        content = "",
+                        createdAt = System.currentTimeMillis() / 1000,
+                        pubkey = pub,
+                        tags = tags
+                    )
+                    contactsEvent.id = Event.generateHash(contactsEvent, false)
+                    contactsEvent.sig = Event.sign(contactsEvent, priv)
+                    viewModel.post(contactsEvent, onSuccess = {}, onFailure = { url, reason ->
+                        coroutineScope.launch(Dispatchers.Main) {
+                            Toast.makeText(
+                                context,
+                                context.getString(R.string.error_failed_to_post),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    })
+                    onNavigate()
+                }) {
+                    Text(stringResource(id = R.string.save))
+                }
+            }
+        }
+
+        LaunchedEffect(metaData) {
+            val m = metaData
+            if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                val data = m.data
+                name = data.name
+                about = data.about
+                picture = data.picture
+                nip05 = data.nip05.domain
+            }
+        }
+        LaunchedEffect(contacts) {
+            val c = contacts
+            if (c is LoadingData.Valid && c.data is ReplaceableEvent.Contacts) {
+                val data = c.data
+                list.clear()
+                list.addAll(data.list)
+            }
+        }
+    }
+}
+
+@Composable
 fun Setting(viewModel: TreeGroveViewModel) {
     val context = LocalContext.current
     val coroutineScope  = rememberCoroutineScope()
@@ -780,7 +993,7 @@ fun Setting(viewModel: TreeGroveViewModel) {
             item {
                 TextField(label = {
                     Text(stringResource(R.string.fetch_size_description))
-                }, value = inputFetchSize.toString(), onValueChange = {
+                }, value = inputFetchSize, onValueChange = {
                     inputFetchSize = it
                 }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done))
             }
