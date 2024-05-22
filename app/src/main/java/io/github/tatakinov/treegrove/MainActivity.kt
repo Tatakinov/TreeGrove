@@ -181,7 +181,9 @@ fun Main(viewModel: TreeGroveViewModel) {
             })
         }
         composable("setting") {
-            Setting(viewModel)
+            Setting(viewModel, onNavigate = {
+                navController.popBackStack()
+            })
         }
         composable("profile") {
             Profile(viewModel, onNavigate = {
@@ -1533,7 +1535,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
 }
 
 @Composable
-fun Setting(viewModel: TreeGroveViewModel) {
+fun Setting(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
     val context = LocalContext.current
     val coroutineScope  = rememberCoroutineScope()
     val state   = rememberLazyListState()
@@ -1693,6 +1695,7 @@ fun Setting(viewModel: TreeGroveViewModel) {
                         relayList = list, fetchSize = inputFetchSize.toLong()))
                 }
                 Toast.makeText(context, context.getString(R.string.save_config), Toast.LENGTH_SHORT).show()
+                onNavigate()
             }
         }, content = {
             Text(stringResource(R.string.save))

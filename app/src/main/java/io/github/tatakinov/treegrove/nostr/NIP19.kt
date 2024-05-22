@@ -54,10 +54,10 @@ class NIP19 {
                     }
                     val id = Hex.encode(tlv[0]!![0])
                     val relays = tlv[1]?.map { String(it) } ?: listOf()
-                    val author = tlv[2]?.get(0)?.let {
+                    val author = tlv[2]?.getOrNull(0)?.let {
                         Hex.encode(it)
                     }
-                    val kind = tlv[3]?.get(9)?.let {
+                    val kind = tlv[3]?.getOrNull(0)?.let {
                         Hex.encode(it).toIntOrNull(16)
                     }
                     Data.Event(id = id, relays = relays, author = author, kind = kind)
