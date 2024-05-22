@@ -15,7 +15,8 @@ sealed class ReplaceableEvent {
             const val petname = "petname"
         }
     }
-    data class ChannelMetaData(val name: String, val about: String, override val createdAt: Long): ReplaceableEvent()
+    data class ChannelMetaData(val name: String, val about: String, val picture: String, val recommendRelay: String? = null, override val createdAt: Long): ReplaceableEvent()
+    data class ChannelList(val list: List<String>, override val createdAt: Long): ReplaceableEvent()
 
     companion object {
         fun parse(event: Event): ReplaceableEvent? {
@@ -51,19 +52,36 @@ sealed class ReplaceableEvent {
                     return try {
                         val json = JSONObject(event.content)
                         ChannelMetaData(name = json.optString("name", "nil"),
-                            about = json.optString("about", ""), createdAt = event.createdAt)
+                            about = json.optString("about", ""),
+                            picture = json.optString("picture", ""), createdAt = event.createdAt)
                     } catch (e: JSONException) {
                         null
                     }
                 }
                 Kind.ChannelMetadata.num -> {
                     return try {
+                        val recommendRelay: String? = event.tags.filter {
+                            it.size >= 3 && it[0] == "e"
+                        }.map {it[2]}.firstOrNull()
                         val json = JSONObject(event.content)
                         ChannelMetaData(name = json.optString("name", "nil"),
-                            about = json.optString("about", ""), createdAt = event.createdAt)
+                            about = json.optString("about", ""),
+                            picture = json.optString("picture", ""),
+                            recommendRelay = recommendRelay, createdAt = event.createdAt)
                     } catch (e: JSONException) {
                         null
                     }
+                }
+                Kind.ChannelList.num -> {
+                    val list = mutableListOf<String>()
+                    for (tag in event.tags) {
+                        if (tag.size >= 2) {
+                            if (tag[0] == "e") {
+                                list.add(tag[1])
+                            }
+                        }
+                    }
+                    return ChannelList(list = list, createdAt = event.createdAt)
                 }
                 else -> {
                     return null

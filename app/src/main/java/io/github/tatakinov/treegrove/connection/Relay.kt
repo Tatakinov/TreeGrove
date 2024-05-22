@@ -8,12 +8,13 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
+import okio.withLock
 import org.json.JSONArray
 import org.json.JSONException
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
-data class Data1(val status: ConnectionStatus, val onReceive: (List<Event>) -> Unit)
+data class Data1(val status: ConnectionStatus, val onReceive: (String, List<Event>) -> Unit)
 data class Data2(val event: Event, val onSuccess: () -> Unit, val onFailure: (String, String) -> Unit)
 
 class Relay (private val _url : String, private val _listener : OnRelayListener) {
@@ -22,9 +23,8 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
     private var _socket: WebSocket? = null
     private val _lock = ReentrantLock()
     private val _postQueue = mutableListOf<Data2>()
-    private var _stream: List<Filter>? = null
-    private var _streamEventList: MutableList<Event>? = null
-    private val _oneShotQueue = mutableMapOf<List<Filter>, Data1>()
+    private var _stream: Set<Filter>? = null
+    private val _oneShotQueue = mutableMapOf<Set<Filter>, Data1>()
     private var _oneShotEventList: MutableList<Event>? = null
     private var _read = true
     private var _write = true
@@ -45,6 +45,7 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
         val req = Request.Builder().url(_url).build()
         _socket = HttpClient.default.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                Log.d("Relay.onOpen", _url)
                 _listener.onTransmit(this@Relay, response.toString().toByteArray().size)
                 _listener.onConnected(this@Relay)
                 sendStream()
@@ -68,15 +69,16 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
                             ) {
                                 when (subscriptionID) {
                                     streamID -> {
-                                        _streamEventList?.let { list ->
-                                            list.add(event)
-                                            list.sortByDescending { e -> e.createdAt }
-                                        } ?: _listener.onEvent(this@Relay, event)
+                                        _lock.withLock {
+                                            _listener.onEvent(this@Relay, event)
+                                        }
                                     }
                                     oneShotID -> {
-                                        _oneShotEventList?.let { list ->
-                                            list.add(event)
-                                            list.sortByDescending { e -> e.createdAt }
+                                        _lock.withLock {
+                                            _oneShotEventList?.let { list ->
+                                                list.add(event)
+                                                list.sortByDescending { e -> e.createdAt }
+                                            }
                                         }
                                     }
                                 }
@@ -86,26 +88,24 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
                         }
 
                         "EOSE" -> {
-                            val subscriptionID = json.getString(1)
-                            when (subscriptionID) {
+                            when (val subscriptionID = json.getString(1)) {
                                 streamID -> {
-                                    _listener.onEOSE(this@Relay, _streamEventList!!)
-                                    _streamEventList = null
+                                    _listener.onEOSE(this@Relay)
                                 }
                                 oneShotID -> {
                                     close(subscriptionID)
                                     _lock.withLock {
-                                        lateinit var key: List<Filter>
+                                        lateinit var key: Set<Filter>
                                         for ((k, v) in _oneShotQueue) {
                                             if (v.status == ConnectionStatus.Connecting) {
                                                 key = k
                                                 break
                                             }
                                         }
-                                        _oneShotQueue[key]!!.onReceive(_oneShotEventList!!)
+                                        _oneShotQueue[key]!!.onReceive(_url, _oneShotEventList!!)
                                         _oneShotQueue.remove(key)
+                                        _oneShotEventList = null
                                     }
-                                    _oneShotEventList = null
                                     sendOneShot()
                                 }
                             }
@@ -150,6 +150,14 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
                 Log.d("Relay", "onFailure")
                 Log.d("Relay", response.toString())
                 Log.d("Relay", t.stackTraceToString())
+                _lock.withLock {
+                    for ((k, v) in _oneShotQueue) {
+                        if (v.status == ConnectionStatus.Connecting) {
+                            _oneShotQueue[k] = v.copy(status = ConnectionStatus.Wait)
+                            break
+                        }
+                    }
+                }
                 _listener.onFailure(this@Relay, t, response)
                 _socket = null
             }
@@ -181,33 +189,45 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
         send(request.toString())
     }
 
-    private fun send(filterList: List<Filter>, id : String) {
+    private fun send(filterSet: Set<Filter>, id : String) {
         if (!_read) {
             return
         }
         val request = JSONArray()
         request.put("REQ")
         request.put(id)
-        for (filter in filterList) {
+        for (filter in filterSet) {
             request.put(filter.toJSONObject())
         }
         send(request.toString())
     }
 
     private fun sendStream() {
+        if (_socket == null) {
+            return
+        }
         _stream?.let {
-            _streamEventList = mutableListOf()
-            send(it, streamID)
+            if (it.isNotEmpty()) {
+                send(it, streamID)
+            }
         }
     }
 
-    fun sendStream(filterList: List<Filter>) {
-        _stream = filterList
-        sendStream()
+    fun sendStream(filterSet: Set<Filter>) {
+        val set = mutableSetOf<Filter>().apply {
+            addAll(filterSet)
+        }
+        if (_stream != set) {
+            _stream = set
+            sendStream()
+        }
     }
 
     private fun sendOneShot() {
-        var filterList: List<Filter>? = null
+        if (_socket == null) {
+            return
+        }
+        var filterSet: Set<Filter>? = null
         _lock.withLock {
             if (_oneShotQueue.any { it.value.status == ConnectionStatus.Connecting }) {
                 return
@@ -215,28 +235,28 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
             for ((k, v) in _oneShotQueue) {
                 if (v.status == ConnectionStatus.Wait) {
                     _oneShotQueue[k] = _oneShotQueue[k]!!.copy(status = ConnectionStatus.Connecting)
-                    filterList = k
+                    filterSet = k
                     break
                 }
             }
         }
-        filterList?.let {
+        filterSet?.let {
             _oneShotEventList = mutableListOf()
             send(it, oneShotID)
         }
     }
 
-    private fun sendOneShot(filterList: List<Filter>, onReceive: (List<Event>) -> Unit) {
+    private fun sendOneShot(filterSet: Set<Filter>, onReceive: (String, List<Event>) -> Unit) {
         _lock.withLock {
-            if (!_oneShotQueue.containsKey(filterList)) {
-                _oneShotQueue[filterList] = Data1(ConnectionStatus.Wait, onReceive)
+            if (!_oneShotQueue.contains(filterSet)) {
+                _oneShotQueue[filterSet] = Data1(ConnectionStatus.Wait, onReceive)
             }
         }
         sendOneShot()
     }
 
-    fun sendOneShot(filter: Filter, onReceive: (List<Event>) -> Unit) {
-        sendOneShot(listOf(filter), onReceive)
+    fun sendOneShot(filter: Filter, onReceive: (String, List<Event>) -> Unit) {
+        sendOneShot(setOf(filter), onReceive)
     }
 
     fun close(subscriptionID: String) {

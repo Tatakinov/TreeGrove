@@ -22,6 +22,7 @@ enum class Kind(val num : Int) {
     MuteList(10000),
     PinList(10001),
     RelayList(10002),
+    ChannelList(10005),
     ClientAuth(22242),
     NwcRequest(23194),
     HttpAuth(27235),

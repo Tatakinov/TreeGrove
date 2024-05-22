@@ -6,7 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.security.MessageDigest
 
-class Event(val kind : Int, val content : String, val createdAt : Long, val pubkey : String, val tags : List<List<String>> = ArrayList<List<String>>(), var id : String = "", var sig : String = "") {
+class Event(val kind : Int, val content : String, val createdAt : Long, val pubkey : String, val tags : List<List<String>> = listOf(), var id : String = "", var sig : String = "") {
 
     fun verify() : Boolean {
         val s   = Hex.decode(sig)
@@ -109,10 +109,10 @@ class Event(val kind : Int, val content : String, val createdAt : Long, val pubk
             val createdAt = json.getLong(CREATED_AT)
             val pubkey = json.getString(PUBKEY)
             val array = json.optJSONArray(TAGS) ?: JSONArray()
-            val tags: ArrayList<List<String>> = ArrayList<List<String>>()
+            val tags: MutableList<List<String>> = mutableListOf()
             for (i in 0 until array.length()) {
                 val v = array.getJSONArray(i)
-                val list = ArrayList<String>()
+                val list = mutableListOf<String>()
                 for (j in 0 until v.length()) {
                     list.add(v.getString(j))
                 }

@@ -55,4 +55,6 @@
     <string name="post_to_channel">チャンネル %s に投稿</string>
     <string name="follow_self">自分をフォローする</string>
     <string name="follow_someone">誰かをフォローしてください</string>
+    <string name="view_profile">プロフを見る</string>
+    <string name="error_failed_to_open_post_screen">投稿画面の表示に失敗しました</string>
 </resources>

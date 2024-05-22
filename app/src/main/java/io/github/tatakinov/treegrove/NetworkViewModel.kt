@@ -3,8 +3,6 @@ package io.github.tatakinov.treegrove
 import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.lifecycle.DefaultLifecycleObserver
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -29,9 +27,9 @@ class NetworkViewModel : ViewModel() {
     private val _mutex  = Mutex()
     private var _channelId = MutableLiveData<String>("")
     val channelId : LiveData<String> get() = _channelId
-    private var _channelListInternal = mutableMapOf<String, MutableList<EventData>>()
-    private val _channelList = MutableLiveData<List<EventData>>(listOf())
-    val channelList : LiveData<List<EventData>> get() = _channelList
+    private var _channelListInternal = mutableMapOf<String, MutableList<EventInfo>>()
+    private val _channelList = MutableLiveData<List<EventInfo>>(listOf())
+    val channelList : LiveData<List<EventInfo>> get() = _channelList
     private val _channelMetaDataInternal = mutableMapOf<String, MetaData>()
     private val _channelMetaData = MutableLiveData<Map<String, MetaData>>(mapOf())
     val channelMetaData : LiveData<Map<String, MetaData>> get() = _channelMetaData
@@ -39,9 +37,9 @@ class NetworkViewModel : ViewModel() {
     private val _eventMap = MutableLiveData<Map<String, Set<Event>>>(mapOf())
     val eventMap : LiveData<Map<String, Set<Event>>> get() = _eventMap
     private val _postLastBrowsed = mutableMapOf<String, Long>()
-    private val _postDataListInternal = mutableMapOf<String, MutableMap<String, MutableList<EventData>>>("" to mutableMapOf())
-    private val _postDataList = MutableLiveData<List<EventData>>(listOf())
-    val postDataList : LiveData<List<EventData>> get() = _postDataList
+    private val _postDataListInternal = mutableMapOf<String, MutableMap<String, MutableList<EventInfo>>>("" to mutableMapOf())
+    private val _postDataList = MutableLiveData<List<EventInfo>>(listOf())
+    val postDataList : LiveData<List<EventInfo>> get() = _postDataList
     private val _userMetaDataInternal = mutableMapOf<String, MetaData>()
     private val _userMetaData = MutableLiveData<Map<String, MetaData>>(mapOf())
     val userMetaData : LiveData<Map<String, MetaData>> get() = _userMetaData
@@ -93,11 +91,11 @@ class NetworkViewModel : ViewModel() {
                                         channelMetaDataIdList = channelMetaDataIdList,
                                         userMetaDataIdList = userMetaDataIdList
                                     )
-                                    val channelList = mutableListOf<EventData>().apply {
+                                    val channelList = mutableListOf<EventInfo>().apply {
                                         addAll(_channelListInternal.values.flatten())
                                         sortByDescending { it.event.createdAt }
                                     }
-                                    val postDataList = mutableListOf<EventData>().apply {
+                                    val postDataList = mutableListOf<EventInfo>().apply {
                                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
                                         sortBy { it.event.createdAt }
                                     }
@@ -177,11 +175,11 @@ class NetworkViewModel : ViewModel() {
                                             userMetaDataIdList = userMetaDataIdList,
                                         )
                                     }
-                                    val channelList = mutableListOf<EventData>().apply {
+                                    val channelList = mutableListOf<EventInfo>().apply {
                                         addAll(_channelListInternal.values.flatten())
                                         sortByDescending { it.event.createdAt }
                                     }
-                                    val postDataList = mutableListOf<EventData>().apply {
+                                    val postDataList = mutableListOf<EventInfo>().apply {
                                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
                                         sortBy { it.event.createdAt }
                                     }
@@ -324,7 +322,7 @@ class NetworkViewModel : ViewModel() {
                 )
             )
         }
-        val list = mutableListOf<EventData>().apply {
+        val list = mutableListOf<EventInfo>().apply {
             for ((_, v) in _postDataListInternal[channelId.value!!]!!) {
                 addAll(v.filter { it.from.contains(relay.url) })
             }
@@ -425,7 +423,7 @@ class NetworkViewModel : ViewModel() {
                             if (!_channelListInternal.contains(event.id)) {
                                 _channelListInternal[event.id] = mutableListOf()
                             }
-                            _channelListInternal[event.id]!!.add(EventData(from = listOf(relay.url), event = event))
+                            _channelListInternal[event.id]!!.add(EventInfo(from = listOf(relay.url), event = event))
                         }
                     }
                     // エラーは出さず受信したイベントを無視する
@@ -494,7 +492,7 @@ class NetworkViewModel : ViewModel() {
                         if (!map.contains(event.id)) {
                             map[event.id] = mutableListOf()
                         }
-                        map[event.id]!!.add(EventData(from = listOf(relay.url), event = event))
+                        map[event.id]!!.add(EventInfo(from = listOf(relay.url), event = event))
                     }
                 }
             }
@@ -530,9 +528,9 @@ class NetworkViewModel : ViewModel() {
                         onNewPost : () -> Unit, onNewPosts: () -> Unit,
                         onPostSuccess : (Relay) -> Unit, onPostFailure : (Relay) -> Unit) = withContext(Dispatchers.Default) {
         _mutex.withLock {
-            _channelListInternal = mutableMapOf<String, MutableList<EventData>>().apply {
+            _channelListInternal = mutableMapOf<String, MutableList<EventInfo>>().apply {
                 for ((k, v) in _channelListInternal) {
-                    val list = mutableListOf<EventData>().apply {
+                    val list = mutableListOf<EventInfo>().apply {
                         addAll(v.filter { f -> configs.any { f.from.contains(it.url) } })
                     }
                     if (list.isNotEmpty()) {
@@ -540,7 +538,7 @@ class NetworkViewModel : ViewModel() {
                     }
                 }
             }
-            _channelList.postValue(mutableListOf<EventData>().apply {
+            _channelList.postValue(mutableListOf<EventInfo>().apply {
                 addAll(_channelListInternal.values.flatten())
                 sortByDescending { it.event.createdAt }
             })
@@ -595,13 +593,13 @@ class NetworkViewModel : ViewModel() {
     suspend fun send(filter : Filter, since : Boolean = false, until : Boolean = false)   = withContext(Dispatchers.IO) {
         viewModelScope.launch(Dispatchers.Default) {
             _mutex.withLock() {
-                val list : List<EventData>? = if (filter.kinds.contains(Kind.ChannelCreation.num)) {
-                    mutableListOf<EventData>().apply {
+                val list : List<EventInfo>? = if (filter.kinds.contains(Kind.ChannelCreation.num)) {
+                    mutableListOf<EventInfo>().apply {
                         addAll(_channelListInternal.values.flatten())
                         sortByDescending { it.event.createdAt }
                     }
                 } else if (filter.kinds.contains(Kind.ChannelMessage.num)) {
-                    mutableListOf<EventData>().apply {
+                    mutableListOf<EventInfo>().apply {
                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
                         sortBy { it.event.createdAt }
                     }
@@ -670,7 +668,7 @@ class NetworkViewModel : ViewModel() {
                     else {
                         0
                     }
-                    val postDataList = mutableListOf<EventData>().apply {
+                    val postDataList = mutableListOf<EventInfo>().apply {
                         addAll(_postDataListInternal[_channelId.value!!]!!.values.flatten())
                         sortByDescending { it.event.createdAt }
                     }

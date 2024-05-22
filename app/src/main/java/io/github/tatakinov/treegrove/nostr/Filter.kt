@@ -80,19 +80,11 @@ data class Filter(
         }
         if (tags.isNotEmpty()) {
             for ((k, v) in tags) {
-                if (v.none {
-                    for (tag in e.tags) {
-                        if (tag.size < 2) {
-                            return false
-                        } else {
-                            if (tag[0] == k) {
-                                return tag[1] == it
-                            }
-                        }
-                    }
+                val list = e.tags.filter { it.size >= 2 && it[0] == k }.map { it[1] }
+                for (id in v) {
+                    if (!list.contains(id)) {
                         return false
-                    }) {
-                    return false
+                    }
                 }
             }
         }

@@ -1,9 +1,73 @@
 package io.github.tatakinov.treegrove.nostr
 
+import fr.acinq.secp256k1.Hex
 import kotlin.Exception
 
 class NIP19 {
     companion object {
+        const val NPUB = "npub"
+        const val NSEC = "nsec"
+        const val NEVENT = "nevent"
+        const val NOTE = "note"
+
+        sealed class Data {
+            data class Sec(val id: String): Data()
+            data class Pub(val id: String): Data()
+            data class Note(val id: String): Data()
+            data class Event(val id: String, val relays: List<String>, val author: String?, val kind: Int?): Data()
+        }
+
+        fun parse(bech32: String): Data? {
+            val (hrp, data) = decode(bech32)
+            return when (hrp) {
+                NSEC -> {
+                    if (data.size == 32) {
+                        Data.Sec(Hex.encode(data))
+                    }
+                    else {
+                        null
+                    }
+                }
+                NPUB -> {
+                    if (data.size == 32) {
+                        Data.Pub(Hex.encode(data))
+                    }
+                    else {
+                        null
+                    }
+                }
+                NOTE -> {
+                    if (data.size == 32) {
+                        Data.Note(Hex.encode(data))
+                    }
+                    else {
+                        null
+                    }
+                }
+                NEVENT -> {
+                    val tlv = parseTLV(data)
+                    if (tlv[0] == null) {
+                        return null
+                    }
+                    if (tlv[0]!!.size == 0) {
+                        return null
+                    }
+                    val id = Hex.encode(tlv[0]!![0])
+                    val relays = tlv[1]?.map { String(it) } ?: listOf()
+                    val author = tlv[2]?.get(0)?.let {
+                        Hex.encode(it)
+                    }
+                    val kind = tlv[3]?.get(9)?.let {
+                        Hex.encode(it).toIntOrNull(16)
+                    }
+                    Data.Event(id = id, relays = relays, author = author, kind = kind)
+                }
+                else -> {
+                    null
+                }
+            }
+        }
+
         fun parseTLV(data: ByteArray): Map<Byte, MutableList<ByteArray>> {
             var index = 0
             val result = mutableMapOf<Byte, MutableList<ByteArray>>()

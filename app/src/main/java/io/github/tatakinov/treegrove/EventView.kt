@@ -407,7 +407,7 @@ fun EventView(post : Event, onGetEventMap: () -> Map<String, Set<Event>>,
                 val (hrp, data) = NIP19.decode(bech32str)
                 val tlv = NIP19.parseTLV(data)
                 val id = Hex.encode(tlv[0]!![0])
-                val relays = tlv[1]?.map { String(it) } ?: mutableListOf()
+                val relays = tlv[1]?.map { String(it, Charsets.UTF_8) } ?: mutableListOf()
                 val author = tlv[2]?.get(0)?.let {
                     Hex.encode(it)
                 } ?: ""
