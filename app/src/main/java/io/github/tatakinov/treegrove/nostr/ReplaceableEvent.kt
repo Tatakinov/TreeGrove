@@ -8,12 +8,8 @@ sealed class ReplaceableEvent {
     abstract val createdAt: Long
 
     data class MetaData(val name: String, val about: String, val picture: String, val nip05: NIP05.Data, override val createdAt: Long): ReplaceableEvent()
-    data class Contacts(val list: List<Map<String, String>>, override val createdAt: Long): ReplaceableEvent() {
-        object Key {
-            const val key = "key"
-            const val relay = "relay"
-            const val petname = "petname"
-        }
+    data class Contacts(val list: List<Data>, override val createdAt: Long): ReplaceableEvent() {
+        data class Data (val key: String, val relay: String = "", val petname: String = "")
     }
     data class ChannelMetaData(val name: String, val about: String, val picture: String, val recommendRelay: String? = null, override val createdAt: Long): ReplaceableEvent()
     data class ChannelList(val list: List<String>, override val createdAt: Long): ReplaceableEvent()
@@ -33,13 +29,16 @@ sealed class ReplaceableEvent {
                 }
                 Kind.Contacts.num -> {
                     return try {
-                        val list = mutableListOf<Map<String, String>>()
+                        val list = mutableListOf<Contacts.Data>()
                         for (tag in event.tags) {
-                            if (tag.size == 3 && tag[0] == "p") {
-                                list.add(mapOf(Contacts.Key.key to tag[1], Contacts.Key.relay to tag[2]))
+                            if (tag.size == 2 && tag[0] == "p") {
+                                list.add(Contacts.Data(key = tag[1]))
+                            }
+                            else if (tag.size == 3 && tag[0] == "p") {
+                                list.add(Contacts.Data(key = tag[1], relay = tag[2]))
                             }
                             else if (tag.size == 4 && tag[0] == "p") {
-                                list.add(mapOf(Contacts.Key.key to tag[1], Contacts.Key.relay to tag[2], Contacts.Key.petname to tag[3]))
+                                list.add(Contacts.Data(key = tag[1], relay = tag[2], petname = tag[3]))
                             }
                         }
                         Contacts(list, event.createdAt)

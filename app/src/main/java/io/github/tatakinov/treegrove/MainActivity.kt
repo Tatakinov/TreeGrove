@@ -1,14 +1,18 @@
 package io.github.tatakinov.treegrove
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,6 +85,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
@@ -178,6 +183,8 @@ fun Main(viewModel: TreeGroveViewModel) {
                 }
             }, onNavigateProfile = {
                 navController.navigate("profile")
+            }, onNavigateImage = { url ->
+                navController.navigate("image?url=${URLEncoder.encode(url, "UTF-8")}")
             })
         }
         composable("setting") {
@@ -189,6 +196,16 @@ fun Main(viewModel: TreeGroveViewModel) {
             Profile(viewModel, onNavigate = {
                 navController.popBackStack()
             })
+        }
+        composable("image?url={url}") {
+            val url = URLDecoder.decode(it.arguments?.getString("url") ?: "", "UTF-8")
+            if (url.isNotEmpty()) {
+                ImageViewer(viewModel, url)
+            }
+            else {
+                Toast.makeText(context, stringResource(id = R.string.error_no_valid_URL), Toast.LENGTH_SHORT).show()
+                navController.popBackStack()
+            }
         }
         composable("post?class={class}&id={id}&pubKey={pubKey}&event={event}") {
             val c = it.arguments?.getString("class") ?: ""
@@ -224,6 +241,32 @@ fun Main(viewModel: TreeGroveViewModel) {
                 Toast.makeText(context, stringResource(id = R.string.error_failed_to_open_post_screen), Toast.LENGTH_SHORT).show()
                 navController.popBackStack()
             }
+        }
+    }
+}
+
+@Composable
+fun ImageViewer(viewModel: TreeGroveViewModel, url: String) {
+    val data by viewModel.fetchImage(url).collectAsState()
+    when (val d = data) {
+        is LoadingData.Valid -> {
+            val bitmap = BitmapFactory.decodeByteArray(d.data, 0, d.data.size)
+            if (bitmap != null) {
+                val image = bitmap.asImageBitmap()
+                Image(bitmap = image, contentDescription = "image")
+            }
+            else {
+                Text(stringResource(id = R.string.error_invalid_image), modifier = Modifier.fillMaxSize())
+            }
+        }
+        is LoadingData.Invalid -> {
+            Text(stringResource(id = R.string.error_invalid_data, d.reason))
+        }
+        is LoadingData.Loading -> {
+            Text(stringResource(id = R.string.loading))
+        }
+        is LoadingData.NotLoading -> {
+            Text(stringResource(id = R.string.not_loading))
         }
     }
 }
@@ -271,9 +314,7 @@ fun ChannelMenuItem(viewModel: TreeGroveViewModel, channel: Event, onAddTab: () 
 fun LoadMoreEventsButton(viewModel: TreeGroveViewModel, filter: Filter) {
     val coroutineScope = rememberCoroutineScope()
     TextButton(onClick = {
-        coroutineScope.launch {
-            viewModel.fetchPastPost(filter)
-        }
+        viewModel.fetchPastPost(filter)
     }) {
         Text(stringResource(id = R.string.load_more), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
@@ -281,7 +322,7 @@ fun LoadMoreEventsButton(viewModel: TreeGroveViewModel, filter: Filter) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigatePost: (Screen, Event?) -> Unit, onNavigateProfile: () -> Unit) {
+fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigatePost: (Screen, Event?) -> Unit, onNavigateProfile: () -> Unit, onNavigateImage: (String) -> Unit) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val publicKey by viewModel.publicKeyFlow.collectAsState()
@@ -289,39 +330,51 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
     val tabList = remember { viewModel.tabList }
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabList.size })
     val channelFilter = Filter(kinds = listOf(Kind.ChannelCreation.num))
-    Scaffold(floatingActionButton = {
-        if (tabList.isNotEmpty()) {
-            FloatingActionButton(onClick = {
-                onNavigatePost(tabList[pagerState.currentPage], null)
-            }) {
-                Icon(Icons.Filled.Create, "post")
+    val channelList by viewModel.subscribeStreamEvent(StreamFilter(id = "channel", filter = channelFilter)).collectAsState()
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    BackHandler(tabList.isNotEmpty()) {
+        val filter = when (val screen = tabList.removeAt(pagerState.currentPage)) {
+            is Screen.OwnTimeline -> {
+                StreamFilter(id = "own@${screen.id}", filter = Filter())
+            }
+            is Screen.Timeline -> {
+                StreamFilter(id = "timeline@${screen.id}", Filter(kinds = listOf(Kind.Text.num), authors = listOf(screen.id)))
+            }
+            is Screen.Channel -> {
+                StreamFilter(id = "channel@${screen.id}", Filter(kinds = listOf(Kind.ChannelMessage.num), tags = mapOf("e" to listOf(screen.id))))
             }
         }
-    }) {padding ->
-        val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-        ModalNavigationDrawer(drawerState = drawerState, drawerContent = {
-            val relayInfoList by viewModel.relayInfoListFlow.collectAsState()
-            val channelList by viewModel.subscribeStreamEvent(channelFilter).collectAsState()
-            val pinnedChannelFilter = Filter(kinds = listOf(Kind.ChannelList.num))
+        viewModel.unsubscribeStreamEvent(filter)
+    }
+    ModalNavigationDrawer(drawerState = drawerState, drawerContent = {
+        val relayInfoList by viewModel.relayInfoListFlow.collectAsState()
+        ModalDrawerSheet(modifier = Modifier.padding(end = 100.dp)) {
+            val listState = rememberLazyListState()
+            var expandRelayList by remember { mutableStateOf(false) }
+            var expandPinnedChannelList by remember { mutableStateOf(false) }
+            var expandChannelList by remember { mutableStateOf(false) }
+            val pub = NIP19.parse(publicKey)
+            val pinnedChannelFilter = if (pub is NIP19.Data.Pub) {
+                StreamFilter(id = "pinned_channel", filter = Filter(kinds = listOf(Kind.ChannelList.num), authors = listOf(pub.id)))
+            }
+            else {
+                StreamFilter(id = "invalid", filter = Filter())
+            }
             val pinnedChannelList by viewModel.subscribeStreamEvent(pinnedChannelFilter).collectAsState()
-            ModalDrawerSheet(modifier = Modifier.padding(end = 100.dp)) {
-                val listState = rememberLazyListState()
-                var expandRelayList by remember { mutableStateOf(false) }
-                var expandPinnedChannelList by remember { mutableStateOf(false) }
-                var expandChannelList by remember { mutableStateOf(false) }
-                LazyColumn(state = listState) {
-                    item {
-                        Row {
-                            Button(
-                                onClick = {
-                                    coroutineScope.launch {
-                                        drawerState.close()
-                                    }
-                                    onNavigateSetting()
+            LazyColumn(state = listState) {
+                item {
+                    Row {
+                        Button(
+                            onClick = {
+                                coroutineScope.launch {
+                                    drawerState.close()
                                 }
-                            ) {
-                                Icon(Icons.Filled.Settings, "setting")
+                                onNavigateSetting()
                             }
+                        ) {
+                            Icon(Icons.Filled.Settings, "setting")
+                        }
+                        if (pub is NIP19.Data.Pub) {
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
@@ -334,207 +387,230 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             }
                         }
                     }
-                    item {
-                        HorizontalDivider()
+                }
+                item {
+                    HorizontalDivider()
+                }
+                item {
+                    val transmittedDataSize by viewModel.transmittedSizeFlow.collectAsState()
+                    var dataSize = transmittedDataSize
+                    for (relayInfo in relayInfoList) {
+                        dataSize += relayInfo.transmittedSize
                     }
-                    item {
-                        val transmittedDataSize by viewModel.transmittedSizeFlow.collectAsState()
-                        var dataSize = transmittedDataSize
-                        for (relayInfo in relayInfoList) {
-                            dataSize += relayInfo.transmittedSize
-                        }
-                        lateinit var unit: String
-                        var s: Double = dataSize.toDouble()
-                        if (s < 1024) {
-                            unit = "B"
-                        } else if (s < 1024 * 1024) {
-                            unit = "kB"
-                            s /= 1024
-                        } else if (s < 1024 * 1024 * 1024) {
-                            unit = "MB"
-                            s /= 1024 * 1024
-                        } else {
-                            unit = "GB"
-                            s /= 1024 * 1024 * 1024
-                        }
-                        val text: String = if (unit == "B") {
-                            "%.0f%s".format(s, unit)
-                        } else {
-                            "%.1f%s".format(s, unit)
-                        }
-                        Text(text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    lateinit var unit: String
+                    var s: Double = dataSize.toDouble()
+                    if (s < 1024) {
+                        unit = "B"
+                    } else if (s < 1024 * 1024) {
+                        unit = "kB"
+                        s /= 1024
+                    } else if (s < 1024 * 1024 * 1024) {
+                        unit = "MB"
+                        s /= 1024 * 1024
+                    } else {
+                        unit = "GB"
+                        s /= 1024 * 1024 * 1024
                     }
-                    item {
-                        HorizontalDivider()
+                    val text: String = if (unit == "B") {
+                        "%.0f%s".format(s, unit)
+                    } else {
+                        "%.1f%s".format(s, unit)
                     }
-                    item {
-                        Row {
-                            var searchWord by remember { mutableStateOf("") }
-                            TextField(value = searchWord, onValueChange = {
-                                searchWord = it.replace("\n", "")
-                            }, modifier = Modifier.weight(1f))
-                            Button(onClick = {
-                            }) {
-                                Icon(Icons.Filled.Search, "search")
-                            }
-                        }
-                    }
-                    item {
-                        HorizontalDivider()
-                    }
-                    item {
-                        NavigationDrawerItem(
-                            label = {
-                                Text(stringResource(id = R.string.relay_connection_status))
-                            },
-                            selected = false,
-                            onClick = {
-                                expandRelayList = !expandRelayList
-                            })
-                    }
-                    if (expandRelayList) {
-                        item {
-                            HorizontalDivider()
-                        }
-                        items(items = relayInfoList, key = { it.url }) { info ->
-                            NavigationDrawerItem(
-                                label = {
-                                    Row {
-                                        Text(info.url, modifier = Modifier.weight(1f))
-                                        if (info.isConnected) {
-                                            Icon(Icons.Filled.Check, "is_connected")
-                                        } else {
-                                            Icon(Icons.Filled.Clear, "not_connected")
-                                        }
-                                    }
-                                },
-                                selected = false,
-                                onClick = {
-                                    viewModel.connectRelay()
-                                })
-                        }
-                    }
-                    if (publicKey.isNotEmpty()) {
-                        item {
-                            HorizontalDivider()
-                        }
-                        item {
-                            NavigationDrawerItem(
-                                icon = { Icon(Icons.Filled.Home, "home") },
-                                label = { Text(stringResource(id = R.string.home)) },
-                                selected = false,
-                                onClick = {
-                                    if (tabList.isEmpty() || tabList.none { it is Screen.OwnTimeline }) {
-                                        val pub = NIP19.parse(publicKey)
-                                        if (pub is NIP19.Companion.Data.Pub) {
-                                            tabList.add(Screen.OwnTimeline(pub.id))
-                                        }
-                                    }
-                                    var index = -1
-                                    for (i in tabList.indices) {
-                                        if (tabList[i] is Screen.OwnTimeline) {
-                                            index = i
-                                            break
-                                        }
-                                    }
-                                    coroutineScope.launch {
-                                        drawerState.close()
-                                    }
-                                    if (index >= 0) {
-                                        coroutineScope.launch {
-                                            pagerState.scrollToPage(index)
-                                        }
-                                    }
-                                })
-                        }
-                    }
-                    item {
-                        HorizontalDivider()
-                    }
-                    item {
-                        NavigationDrawerItem(
-                            label = {
-                                Text(stringResource(id = R.string.pinned_channel))
-                            },
-                            selected = false,
-                            onClick = { expandPinnedChannelList = !expandPinnedChannelList })
-                    }
-                    if (expandPinnedChannelList) {
-                        item {
-                            HorizontalDivider()
-                        }
-                        items(items = pinnedChannelList, key = { it.toJSONObject().toString() }) { channel ->
-                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
-                                if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
-                                    tabList.add(Screen.Channel(channel.id, channel.pubkey))
-                                }
-                                var index = -1
-                                for (i in tabList.indices) {
-                                    if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
-                                        index = i
-                                        break
-                                    }
-                                }
-                                coroutineScope.launch {
-                                    drawerState.close()
-                                }
-                                if (index >= 0) {
-                                    coroutineScope.launch {
-                                        pagerState.scrollToPage(index)
-                                    }
-                                }
-                            })
-                        }
-                    }
-                    item {
-                        HorizontalDivider()
-                    }
-                    item {
-                        NavigationDrawerItem(
-                            label = {
-                                Text(stringResource(id = R.string.list_of_channel))
-                            },
-                            selected = false,
-                            onClick = { expandChannelList = !expandChannelList })
-                    }
-                    if (expandChannelList) {
-                        item {
-                            HorizontalDivider()
-                        }
-                        items(items = channelList, key = { it.toJSONObject().toString() }) { channel ->
-                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
-                                if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
-                                    tabList.add(Screen.Channel(channel.id, channel.pubkey))
-                                }
-                                var index = -1
-                                for (i in tabList.indices) {
-                                    if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
-                                        index = i
-                                        break
-                                    }
-                                }
-                                coroutineScope.launch {
-                                    drawerState.close()
-                                }
-                                if (index >= 0) {
-                                    coroutineScope.launch {
-                                        pagerState.scrollToPage(index)
-                                    }
-                                }
-                            })
-                        }
-                        item {
-                            LoadMoreEventsButton(viewModel = viewModel, filter = channelFilter)
+                    Text(text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                }
+                item {
+                    HorizontalDivider()
+                }
+                item {
+                    Row {
+                        var searchWord by remember { mutableStateOf("") }
+                        TextField(value = searchWord, onValueChange = {
+                            searchWord = it.replace("\n", "")
+                        }, modifier = Modifier.weight(1f))
+                        Button(onClick = {
+                        }) {
+                            Icon(Icons.Filled.Search, "search")
                         }
                     }
                 }
+                item {
+                    HorizontalDivider()
+                }
+                item {
+                    NavigationDrawerItem(
+                        label = {
+                            Text(stringResource(id = R.string.relay_connection_status))
+                        },
+                        selected = false,
+                        onClick = {
+                            expandRelayList = !expandRelayList
+                        })
+                }
+                if (expandRelayList) {
+                    item {
+                        HorizontalDivider()
+                    }
+                    items(items = relayInfoList, key = { it.url }) { info ->
+                        NavigationDrawerItem(
+                            label = {
+                                Row {
+                                    Text(info.url, modifier = Modifier.weight(1f))
+                                    if (info.isConnected) {
+                                        Icon(Icons.Filled.Check, "is_connected")
+                                    } else {
+                                        Icon(Icons.Filled.Clear, "not_connected")
+                                    }
+                                }
+                            },
+                            selected = false,
+                            onClick = {
+                                viewModel.connectRelay()
+                            })
+                    }
+                }
+                if (publicKey.isNotEmpty()) {
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.Home, "home") },
+                            label = { Text(stringResource(id = R.string.home)) },
+                            selected = false,
+                            onClick = {
+                                if (tabList.isEmpty() || tabList.none { it is Screen.OwnTimeline }) {
+                                    val pub = NIP19.parse(publicKey)
+                                    if (pub is NIP19.Data.Pub) {
+                                        tabList.add(Screen.OwnTimeline(pub.id))
+                                    }
+                                }
+                                var index = -1
+                                for (i in tabList.indices) {
+                                    if (tabList[i] is Screen.OwnTimeline) {
+                                        index = i
+                                        break
+                                    }
+                                }
+                                coroutineScope.launch {
+                                    drawerState.close()
+                                }
+                                if (index >= 0) {
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(index)
+                                    }
+                                }
+                            })
+                    }
+                }
+                item {
+                    HorizontalDivider()
+                }
+                item {
+                    NavigationDrawerItem(
+                        label = {
+                            Text(stringResource(id = R.string.pinned_channel))
+                        },
+                        selected = false,
+                        onClick = { expandPinnedChannelList = !expandPinnedChannelList })
+                }
+                if (expandPinnedChannelList) {
+                    items(items = pinnedChannelList, key = { it.toJSONObject().toString() }) { channel ->
+                        ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                            if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
+                                tabList.add(Screen.Channel(channel.id, channel.pubkey))
+                            }
+                            var index = -1
+                            for (i in tabList.indices) {
+                                if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
+                                    index = i
+                                    break
+                                }
+                            }
+                            coroutineScope.launch {
+                                drawerState.close()
+                            }
+                            if (index >= 0) {
+                                coroutineScope.launch {
+                                    pagerState.scrollToPage(index)
+                                }
+                            }
+                        })
+                    }
+                }
+                item {
+                    HorizontalDivider()
+                }
+                item {
+                    NavigationDrawerItem(
+                        label = {
+                            Text(stringResource(id = R.string.list_of_channel))
+                        },
+                        selected = false,
+                        onClick = { expandChannelList = !expandChannelList })
+                }
+                if (expandChannelList) {
+                    item {
+                        HorizontalDivider()
+                    }
+                    items(items = channelList, key = { it.toJSONObject().toString() }) { channel ->
+                        ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                            if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
+                                tabList.add(Screen.Channel(channel.id, channel.pubkey))
+                            }
+                            var index = -1
+                            for (i in tabList.indices) {
+                                if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
+                                    index = i
+                                    break
+                                }
+                            }
+                            coroutineScope.launch {
+                                drawerState.close()
+                            }
+                            if (index >= 0) {
+                                coroutineScope.launch {
+                                    pagerState.scrollToPage(index)
+                                }
+                            }
+                        })
+                    }
+                    item {
+                        LoadMoreEventsButton(viewModel = viewModel, filter = channelFilter)
+                    }
+                }
             }
-        }) {
+        }
+    }) {
+        Scaffold(floatingActionButton = {
+            if (tabList.isNotEmpty()) {
+                FloatingActionButton(onClick = {
+                    onNavigatePost(tabList[pagerState.currentPage], null)
+                }) {
+                    Icon(Icons.Filled.Create, "post")
+                }
+            }
+        }, bottomBar = {
+            val selectedTabIndex by remember { derivedStateOf { pagerState.currentPage } }
+            TabRow(selectedTabIndex = selectedTabIndex) {
+                tabList.forEachIndexed { index, screen ->
+                    Tab(selected = selectedTabIndex == index,
+                        onClick = {
+                            coroutineScope.launch {
+                                pagerState.scrollToPage(index)
+                            }
+                        },
+                        icon = {
+                            Icon(screen.icon, "Tab Icon")
+                        })
+                }
+            }
+        }) { padding ->
             Column {
-                val selectedTabIndex by remember { derivedStateOf { pagerState.currentPage }}
-                HorizontalPager(state = pagerState, modifier = Modifier
-                    .padding(padding)
-                    .weight(1f), userScrollEnabled = false) { index ->
+                HorizontalPager(
+                    state = pagerState, modifier = Modifier
+                        .padding(padding)
+                        .weight(1f), userScrollEnabled = false
+                ) { index ->
                     val onAddScreen: (Screen) -> Unit = { screen ->
                         val pos = tabList.indexOf(screen)
                         if (pos == -1) {
@@ -542,8 +618,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             coroutineScope.launch {
                                 pagerState.scrollToPage(tabList.size - 1)
                             }
-                        }
-                        else {
+                        } else {
                             coroutineScope.launch {
                                 pagerState.scrollToPage(pos)
                             }
@@ -553,31 +628,20 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                         is Screen.OwnTimeline -> {
                             OwnTimeline(viewModel, screen.id, onNavigate = {
                                 onNavigatePost(screen, it)
-                            }, onAddScreen = onAddScreen)
+                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
                         }
+
                         is Screen.Timeline -> {
                             Timeline(viewModel, screen.id, onNavigate = {
                                 onNavigatePost(screen, it)
-                            }, onAddScreen = onAddScreen)
+                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
                         }
+
                         is Screen.Channel -> {
                             Channel(viewModel, screen.id, screen.pubKey, onNavigate = {
                                 onNavigatePost(screen, it)
-                            }, onAddScreen = onAddScreen)
+                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
                         }
-                    }
-                }
-                TabRow(selectedTabIndex = selectedTabIndex) {
-                    tabList.forEachIndexed { index, screen ->
-                        Tab(selected = selectedTabIndex == index,
-                            onClick = {
-                                coroutineScope.launch {
-                                    pagerState.scrollToPage(index)
-                                }
-                            },
-                            icon = {
-                                Icon(screen.icon, "Tab Icon")
-                            })
                     }
                 }
             }
@@ -585,13 +649,13 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
     }
     LaunchedEffect(relayConfigList) {
         viewModel.setRelayConfigList(relayConfigList)
-        if (relayConfigList.isNotEmpty()) {
+        if (relayConfigList.isNotEmpty() && channelList.isEmpty()) {
             viewModel.fetchPastPost(channelFilter)
         }
     }
     LaunchedEffect(publicKey) {
         val pub = NIP19.parse(publicKey)
-        if (pub is NIP19.Companion.Data.Pub) {
+        if (pub is NIP19.Data.Pub) {
             for (i in tabList.indices) {
                 if (tabList[i] is Screen.OwnTimeline) {
                     tabList[i] = Screen.OwnTimeline(pub.id)
@@ -611,19 +675,15 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
             }
         }
     }
-    LaunchedEffect(tabList) {
-        pagerState.scrollToPage(tabList.size - 1)
-    }
 }
 
 @Composable
-fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?) {
+fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?, onNavigateImage: ((String) -> Unit)?) {
     val userMetaDataMap = remember { mutableStateMapOf<String, State<LoadingData<ReplaceableEvent>>>() }
     val uriHandler = LocalUriHandler.current
     val date = Date(event.createdAt * 1000)
     val format = SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
     val d   = format.format(date)
-    val metaDataState = viewModel.subscribeReplaceableEvent(Filter(authors = listOf(event.pubkey), kinds = listOf(Kind.Metadata.num))).collectAsState()
     var expanded by remember { mutableStateOf(false) }
     var i = 0
     while (i < event.content.length) {
@@ -631,10 +691,11 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
         if (pos == -1) {
             break
         }
+        Log.d("debug", event.content.substring(pos))
         val match = "^nostr:npub1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
         if (match != null) {
             val pub = NIP19.parse(match.value.substring(6))
-            if (pub is NIP19.Companion.Data.Pub && !userMetaDataMap.containsKey(pub.id)) {
+            if (pub is NIP19.Data.Pub && !userMetaDataMap.containsKey(pub.id)) {
                 userMetaDataMap[pub.id] = viewModel.subscribeReplaceableEvent(
                     Filter(
                         kinds = listOf(Kind.Metadata.num),
@@ -642,22 +703,20 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                     )
                 ).collectAsState()
             }
-            i += pos + match.value.length
-            break
+            i = pos + match.value.length
         } else {
-            i += pos + 1
+            i = pos + 1
         }
     }
     val annotated =
         buildAnnotatedString {
-            var index = 0
             val func = mapOf<Regex, (String) -> Boolean>(
                 "^nostr:npub1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
                     val bech32 = value.substring(6)
                     val pub = NIP19.parse(bech32)
-                    if (pub is NIP19.Companion.Data.Pub && userMetaDataMap.containsKey(pub.id)) {
-                        val e = userMetaDataMap[pub.id]!!.value
-                        if (e is LoadingData.Valid && e.data is ReplaceableEvent.MetaData) {
+                    if (pub is NIP19.Data.Pub && userMetaDataMap.containsKey(pub.id)) {
+                        val e = userMetaDataMap[pub.id]?.value
+                        if (e != null && e is LoadingData.Valid && e.data is ReplaceableEvent.MetaData) {
                             withStyle(style = SpanStyle(color = Color.Cyan)) {
                                 append(e.data.name)
                             }
@@ -673,8 +732,8 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                 },
                 "^nostr:note1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
                     val note = NIP19.parse(value.substring(6))
-                    if (note is NIP19.Companion.Data.Note) {
-                        pushStringAnnotation(tag = "note", annotation = value)
+                    if (note is NIP19.Data.Note) {
+                        pushStringAnnotation(tag = "nevent", annotation = value)
                         withStyle(style = SpanStyle(color = Color.Green)) {
                             append(value)
                         }
@@ -685,8 +744,8 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                 },
                 "^nostr:nevent1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
                     val nevent = NIP19.parse(value.substring(6))
-                    if (nevent is NIP19.Companion.Data.Event) {
-                        pushStringAnnotation(tag = "note", annotation = value)
+                    if (nevent is NIP19.Data.Event) {
+                        pushStringAnnotation(tag = "nevent", annotation = value)
                         withStyle(style = SpanStyle(color = Color.Green)) {
                             append(value)
                         }
@@ -728,35 +787,40 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                     return@label true
                 })
             val content = event.content
+            var index = 0
+            val prefixList = listOf("nostr:", "http://", "https://")
             while (index < content.length) {
-                val sub = content.substring(index)
-                var isReplaced = false
-                for ((k, v) in func) {
-                    val match = k.find(sub)
-                    if (match != null && v(match.value)) {
-                        isReplaced = true
-                        index += match.value.length
-                        break
+                val min = prefixList.filter { content.indexOf(it, index) != -1 }
+                    .minOfOrNull { content.indexOf(it, index) }
+                if (min != null) {
+                    if (min > index) {
+                        append(content.substring(index, min))
+                    }
+                    val sub = content.substring(min)
+                    var isReplaced = false
+                    for ((k, v) in func) {
+                        val match = k.find(sub)
+                        if (match != null && v(match.value)) {
+                            isReplaced = true
+                            index = min + match.value.length
+                            break
+                        }
+                    }
+                    if (!isReplaced) {
+                        append(content[index])
+                        index++
                     }
                 }
-                if (!isReplaced) {
-                    append(content[index])
-                    index++
+                else {
+                    append(content.substring(index))
+                    break
                 }
             }
         }
     Box(modifier = Modifier.padding(top = 5.dp, bottom = 5.dp)) {
         Column(modifier = Modifier
             .padding(start = 10.dp, end = 10.dp)
-            .pointerInput(
-                event
-                    .toJSONObject()
-                    .toString()
-            ) {
-                detectTapGestures(onTap = {
-                    expanded = true
-                })
-            }) {
+            .clickable { expanded = true }) {
             /*
         名前が短いときは
         hoge             2000/01/01 00:00:00
@@ -770,7 +834,9 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
          */
             CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val m = metaDataState.value
+                    val filter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(event.pubkey))
+                    val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
+                    val m = metaData
                     /*
                 Rtlのままだと
                 00:00:00 2000/01/01
@@ -832,16 +898,48 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                 var tapped = false
                 annotated.getStringAnnotations(tag = "image", start = offset, end = offset)
                     .firstOrNull()?.let {
-                        TODO("stub")
+                        if (onNavigateImage != null) {
+                            onNavigateImage(it.item)
+                        }
                     }
                 annotated.getStringAnnotations(tag = "url", start = offset, end = offset)
                     .firstOrNull()?.let {
                         uriHandler.openUri(it.item)
                         tapped = true
                     }
-                annotated.getStringAnnotations(tag = "note", start = offset, end = offset)
+                annotated.getStringAnnotations(tag = "nevent", start = offset, end = offset)
                     .firstOrNull()?.let {
-                        TODO("stub")
+                        val data = NIP19.parse(it.item)
+                        var screen: Screen? = null
+                        when (data) {
+                            is NIP19.Data.Note -> {
+                                // TODO single event
+                            }
+                            is NIP19.Data.Event -> {
+                                when (data.kind) {
+                                    Kind.Text.num -> {
+                                        // TODO single event
+                                    }
+                                    Kind.ChannelCreation.num -> {
+                                        if (data.author != null) {
+                                            screen =
+                                                Screen.Channel(id = data.id, pubKey = data.author)
+                                        }
+                                    }
+                                    Kind.ChannelMessage.num -> {
+                                        // TODO single event
+                                    }
+                                    else -> {}
+                                }
+                            }
+                            is NIP19.Data.Profile -> {
+                                screen = Screen.Timeline(id = data.id)
+                            }
+                            else -> {}
+                        }
+                        if (screen != null && onAddScreen != null) {
+                            onAddScreen(screen)
+                        }
                     }
             }, style = TextStyle(color = contentColorFor(MaterialTheme.colorScheme.background)))
         }
@@ -869,30 +967,65 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
 }
 
 @Composable
-fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit) {
-    val followFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(id))
-    val followList by viewModel.subscribeReplaceableEvent(followFilter).collectAsState()
-    val list = followList
-    if (list is LoadingData.Valid && list.data is ReplaceableEvent.Contacts && list.data.list.isNotEmpty()) {
-        val contacts = list.data.list
-        val eventFilter = Filter(kinds = listOf(Kind.Text.num), authors = contacts.map { it[ReplaceableEvent.Contacts.Key.key]!!})
-        val eventList by viewModel.subscribeStreamEvent(eventFilter).collectAsState()
+fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
+    var expandFolloweeList by remember { mutableStateOf(false) }
+    val followeeFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(id))
+    val followeeEvent by viewModel.subscribeReplaceableEvent(followeeFilter).collectAsState()
+    val f = followeeEvent
+    val followeeList = if (f is LoadingData.Valid && f.data is ReplaceableEvent.Contacts) {
+        f.data.list
+    }
+    else {
+        listOf()
+    }
+    var expandFollowerList by remember { mutableStateOf(false) }
+    val followerFilter = Filter(kinds = listOf(Kind.Contacts.num), tags = mapOf("p" to listOf(id)))
+    val followerListEvent by viewModel.subscribeStreamEvent(StreamFilter(id = "follower@${id}", filter = followerFilter)).collectAsState()
+    if (followeeList.isNotEmpty()) {
+        val eventFilter = Filter(kinds = listOf(Kind.Text.num), authors = followeeList.map { it.key })
+        val eventList by viewModel.subscribeStreamEvent(StreamFilter(id = "own@${id}", filter = eventFilter)).collectAsState()
         val listState = rememberLazyListState()
         LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
-            itemsIndexed(items = eventList, key = { index, event ->
-                event.toJSONObject().toString()
-            }) { index, event ->
-                if (index > 0) {
-                    HorizontalDivider()
+            item {
+                TextButton(onClick = { expandFolloweeList = !expandFolloweeList }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(id = R.string.followee))
                 }
-                Event1(viewModel, event = event, onNavigate = onNavigate, onAddScreen = onAddScreen)
+            }
+            if (expandFolloweeList) {
+                items(items = followeeList, key = { "followee@${it.key}" }) {
+                    HorizontalDivider()
+                    Follow(viewModel, it.key, onAddScreen = onAddScreen)
+                }
+            }
+            item {
+                HorizontalDivider()
+            }
+            item {
+                TextButton(onClick = { expandFollowerList = !expandFollowerList }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(id = R.string.follower))
+                }
+            }
+            if (expandFollowerList) {
+                items(items = followerListEvent, key = { "follower@${it.pubkey}" }) {
+                    HorizontalDivider()
+                    Follow(viewModel = viewModel, it.pubkey, onAddScreen = onAddScreen)
+                }
+            }
+            items(items = eventList, key = { event ->
+                event.toJSONObject().toString()
+            }) { event ->
+                HorizontalDivider()
+                Event1(viewModel, event = event, onNavigate = onNavigate, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
             }
             item{
+                HorizontalDivider()
                 LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
             }
         }
         LaunchedEffect(id) {
-            viewModel.fetchPastPost(eventFilter)
+            if (eventList.isEmpty()) {
+                viewModel.fetchPastPost(eventFilter)
+            }
         }
     }
     else {
@@ -901,143 +1034,197 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
 }
 
 @Composable
-fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit) {
+fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val eventFilter = Filter(kinds = listOf(Kind.Text.num), authors = listOf(id))
-    val eventList by viewModel.subscribeStreamEvent(eventFilter).collectAsState()
-    val metaDataFilter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(id))
-    val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
-    val listState = rememberLazyListState()
     val privateKey by viewModel.privateKeyFlow.collectAsState()
     val publicKey by viewModel.publicKeyFlow.collectAsState()
-    LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
-        val m = metaData
-        item {
-            Row {
-                if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                    Text(
-                        m.data.name,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 10.dp, end = 10.dp),
-                        overflow = TextOverflow.Ellipsis
-                    )
+    val priv = NIP19.parse(privateKey)
+    val pub = NIP19.parse(publicKey)
+    val meta by viewModel.subscribeReplaceableEvent(
+        Filter(
+            kinds = listOf(Kind.Metadata.num),
+            authors = listOf(pubkey)
+        )
+    ).collectAsState()
+    val m = meta
+    val name = if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+        m.data.name
+    }
+    else {
+        pubkey
+    }
+    Row(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            name,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 10.dp, end = 10.dp)
+                .clickable {
+                    onAddScreen(Screen.Timeline(id = pubkey))
+                }
+        )
+        if (priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
+            val contacts by viewModel.subscribeReplaceableEvent(Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))).collectAsState()
+            val c = contacts
+            if (c is LoadingData.Valid && c.data is ReplaceableEvent.Contacts) {
+                if (c.data.list.any { it.key == pubkey }) {
+                    var expandUnfollowDialog by remember { mutableStateOf(false) }
+                    Button(onClick = {
+                        expandUnfollowDialog = true
+                    }) {
+                        Icon(Icons.Filled.Clear, "unfollow")
+                    }
+                    if (expandUnfollowDialog) {
+                        AlertDialog(
+                            title = {
+                                Text(stringResource(id = R.string.unfollow))
+                            },
+                            text = {
+                                Text(name)
+                            },
+                            onDismissRequest = { expandUnfollowDialog = false },
+                            dismissButton = {
+                                TextButton(onClick = { expandUnfollowDialog = false }) {
+                                    Text(stringResource(id = R.string.cancel))
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val list = c.data.list.filter { it.key != pubkey }
+                                    Misc.postContacts(viewModel, list, priv, pub, onSuccess = {}, onFailure = { url, reason ->
+                                        coroutineScope.launch {
+                                            Toast.makeText(context, context.getString(R.string.error_failed_to_post, reason), Toast.LENGTH_SHORT).show()
+                                        }
+                                    })
+                                }) {
+                                    Text(stringResource(id = R.string.ok))
+                                }
+                            }
+                        )
+                    }
                 }
                 else {
-                    Text(id, modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 10.dp, end = 10.dp), overflow = TextOverflow.Ellipsis)
-                }
-                if (privateKey.isNotEmpty() && publicKey.isNotEmpty()) {
-                    val priv = NIP19.parse(privateKey)
-                    val pub = NIP19.parse(publicKey)
-                    if (priv is NIP19.Companion.Data.Sec && pub is NIP19.Companion.Data.Pub) {
-                        val contactsFilter =
-                            Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))
-                        val contacts by viewModel.subscribeReplaceableEvent(contactsFilter)
-                            .collectAsState()
-                        val c = contacts
-                        if (c is LoadingData.Valid && c.data is ReplaceableEvent.Contacts) {
-                            if (c.data.list.any { it[ReplaceableEvent.Contacts.Key.key] == id }) {
-                                Button(modifier = Modifier.padding(start = 10.dp, end = 10.dp), onClick = {
-                                    val list = c.data.list.filter { it[ReplaceableEvent.Contacts.Key.key] != id }
-                                    val tags = mutableListOf<List<String>>()
-                                    for (tag in list) {
-                                        tags.add(
-                                            listOf(
-                                                "p",
-                                                tag[ReplaceableEvent.Contacts.Key.key] ?: "",
-                                                tag[ReplaceableEvent.Contacts.Key.relay] ?: "",
-                                                tag[ReplaceableEvent.Contacts.Key.petname] ?: ""
-                                            )
-                                        )
-                                    }
-                                    val contactsEvent = Event(
-                                        kind = Kind.Contacts.num,
-                                        content = "",
-                                        createdAt = System.currentTimeMillis() / 1000,
-                                        pubkey = pub.id,
-                                        tags = tags
-                                    )
-                                    contactsEvent.id = Event.generateHash(contactsEvent, false)
-                                    contactsEvent.sig = Event.sign(contactsEvent, priv.id)
-                                    viewModel.post(contactsEvent, onSuccess = {}, onFailure = { url, reason ->
-                                        coroutineScope.launch(Dispatchers.Main) {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.error_failed_to_post),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        }
-                                    })
-                                }) {
-                                    Icon(Icons.Filled.Clear, "unfollow")
+                    var expandFollowDialog by remember { mutableStateOf(false) }
+                    Button(onClick = {
+                        expandFollowDialog = true
+                    }) {
+                        Icon(Icons.Filled.Add, "follow")
+                    }
+                    if (expandFollowDialog) {
+                        AlertDialog(
+                            title = {
+                                Text(stringResource(id = R.string.follow))
+                            },
+                            text = {
+                                Text(name)
+                            },
+                            onDismissRequest = { expandFollowDialog = false },
+                            dismissButton = {
+                                TextButton(onClick = { expandFollowDialog = false }) {
+                                    Text(stringResource(id = R.string.cancel))
                                 }
-                            }
-                            else {
-                                Button(onClick = {
-                                    val list = mutableListOf<Map<String,String>>().apply {
-                                        addAll(c.data.list)
-                                        add(mapOf(ReplaceableEvent.Contacts.Key.key to id))
-                                    }
-                                    val tags = mutableListOf<List<String>>()
-                                    for (tag in list) {
-                                        tags.add(
-                                            listOf(
-                                                "p",
-                                                tag[ReplaceableEvent.Contacts.Key.key] ?: "",
-                                                tag[ReplaceableEvent.Contacts.Key.relay] ?: "",
-                                                tag[ReplaceableEvent.Contacts.Key.petname] ?: ""
-                                            )
-                                        )
-                                    }
-                                    val contactsEvent = Event(
-                                        kind = Kind.Contacts.num,
-                                        content = "",
-                                        createdAt = System.currentTimeMillis() / 1000,
-                                        pubkey = pub.id,
-                                        tags = tags
-                                    )
-                                    contactsEvent.id = Event.generateHash(contactsEvent, false)
-                                    contactsEvent.sig = Event.sign(contactsEvent, priv.id)
-                                    viewModel.post(contactsEvent, onSuccess = {}, onFailure = { url, reason ->
-                                        coroutineScope.launch(Dispatchers.Main) {
-                                            Toast.makeText(
-                                                context,
-                                                context.getString(R.string.error_failed_to_post),
-                                                Toast.LENGTH_SHORT
-                                            ).show()
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val list =
+                                        mutableListOf<ReplaceableEvent.Contacts.Data>().apply {
+                                            addAll(c.data.list)
+                                            add(ReplaceableEvent.Contacts.Data(key = pubkey))
                                         }
-                                    })
+                                    Misc.postContacts(viewModel, list, priv, pub, onSuccess = {},
+                                        onFailure = { url, reason ->
+                                            coroutineScope.launch {
+                                                Toast.makeText(
+                                                    context,
+                                                    context.getString(
+                                                        R.string.error_failed_to_post,
+                                                        reason
+                                                    ),
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        })
                                 }) {
-                                    Icon(Icons.Filled.Add, "follow")
+                                    Text(stringResource(id = R.string.ok))
                                 }
-                            }
-                        }
+                            })
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
+    val eventFilter = Filter(kinds = listOf(Kind.Text.num), authors = listOf(id))
+    val eventList by viewModel.subscribeStreamEvent(StreamFilter(id = "timeline@${id}", filter = eventFilter)).collectAsState()
+    val metaDataFilter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(id))
+    val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
+    val listState = rememberLazyListState()
+    var expandFolloweeList by remember { mutableStateOf(false) }
+    val followeeFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(id))
+    val followeeEvent by viewModel.subscribeReplaceableEvent(followeeFilter).collectAsState()
+    val f = followeeEvent
+    val followeeListEvent = if (f is LoadingData.Valid && f.data is ReplaceableEvent.Contacts) {
+        f.data.list
+    }
+    else {
+        listOf()
+    }
+    var expandFollowerList by remember { mutableStateOf(false) }
+    val followerFilter = Filter(kinds = listOf(Kind.Contacts.num), tags = mapOf("p" to listOf(id)))
+    val followerListEvent by viewModel.subscribeStreamEvent(StreamFilter(id = "follower@${id}", filter = followerFilter)).collectAsState()
+    LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
+        val m = metaData
+        item {
+            Follow(viewModel = viewModel, pubkey = id, onAddScreen = onAddScreen)
         }
         if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
             item {
                 Text(m.data.about, modifier = Modifier.padding(start = 10.dp, end = 10.dp))
             }
         }
+        item {
+            HorizontalDivider()
+        }
+        item {
+            TextButton(onClick = { expandFolloweeList = !expandFolloweeList }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(id = R.string.followee))
+            }
+        }
+        if (expandFolloweeList) {
+            items(items = followeeListEvent, key = { "followee@${it.key}" }) {
+                Follow(viewModel, it.key, onAddScreen = onAddScreen)
+            }
+        }
+        item {
+            TextButton(onClick = { expandFollowerList = !expandFollowerList }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(id = R.string.follower))
+            }
+        }
+        if (expandFollowerList) {
+            items(items = followerListEvent, key = { "follower@${it.pubkey}" }) {
+                Follow(viewModel = viewModel, it.pubkey, onAddScreen = onAddScreen)
+            }
+        }
         itemsIndexed(items = eventList, key = { index, event ->
             event.toJSONObject().toString()
         }) { index, event ->
-            if (index > 0) {
-                HorizontalDivider()
-            }
-            Event1(viewModel, event, onNavigate = onNavigate, onAddScreen = onAddScreen)
+            HorizontalDivider()
+            Event1(viewModel, event, onNavigate = onNavigate, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
         }
         item {
+            HorizontalDivider()
             LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
         }
     }
     LaunchedEffect(id) {
-        viewModel.fetchPastPost(eventFilter)
+        if (eventList.isEmpty()) {
+            viewModel.fetchPastPost(eventFilter)
+        }
     }
 }
 
@@ -1049,10 +1236,15 @@ fun ChannelTitle(viewModel: TreeGroveViewModel, id: String, name: String, about:
     val priv = NIP19.parse(privateKey)
     val publicKey by viewModel.publicKeyFlow.collectAsState()
     val pub = NIP19.parse(publicKey)
+    var expandAbout by remember { mutableStateOf(false) }
     Column(modifier = Modifier.padding(start = 10.dp, end = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(name, modifier = Modifier.weight(1f))
-            if (priv is NIP19.Companion.Data.Sec && pub is NIP19.Companion.Data.Pub) {
+            TextButton(onClick = {
+                expandAbout = !expandAbout
+            }, modifier = Modifier.weight(1f)) {
+                Text(name)
+            }
+            if (priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
                 val pinListFilter = Filter(kinds = listOf(Kind.ChannelList.num), authors = listOf(pub.id))
                 val pinList by viewModel.subscribeReplaceableEvent(pinListFilter).collectAsState()
                 val p = pinList
@@ -1141,46 +1333,53 @@ fun ChannelTitle(viewModel: TreeGroveViewModel, id: String, name: String, about:
                 }
             }
         }
-        if (!about.isNullOrEmpty()) {
+        if (!about.isNullOrEmpty() && expandAbout) {
+            HorizontalDivider()
             Text(about)
         }
     }
 }
 
 @Composable
-fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit) {
+fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
     val listState = rememberLazyListState()
     val metaDataFilter = Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(pubKey), tags = mapOf("e" to listOf(id)))
     val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
     val eventFilter = Filter(kinds = listOf(Kind.ChannelMessage.num), tags = mapOf("e" to listOf(id)))
-    val eventList by viewModel.subscribeStreamEvent(eventFilter).collectAsState()
-    LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
-        item {
-            val m = metaData
-            if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
-                ChannelTitle(viewModel = viewModel, id = id, name = m.data.name, about = m.data.about)
-            }
-            else {
-                ChannelTitle(viewModel = viewModel, id = id, name = id, about = null)
-            }
+    val eventList by viewModel.subscribeStreamEvent(StreamFilter(id = "channel@${id}", filter = eventFilter)).collectAsState()
+    Column {
+        val m = metaData
+        if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
+            ChannelTitle(viewModel = viewModel, id = id, name = m.data.name, about = m.data.about)
+        } else {
+            ChannelTitle(viewModel = viewModel, id = id, name = id, about = null)
         }
-        item {
-            HorizontalDivider()
-        }
-        itemsIndexed(items = eventList, key = { index, event ->
-            event.toJSONObject().toString()
-        }) { index, event ->
-            if (index > 0) {
+        HorizontalDivider()
+        LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
+            itemsIndexed(items = eventList, key = { index, event ->
+                event.toJSONObject().toString()
+            }) { index, event ->
+                if (index > 0) {
+                    HorizontalDivider()
+                }
+                Event1(
+                    viewModel = viewModel,
+                    event = event,
+                    onNavigate = onNavigate,
+                    onAddScreen = onAddScreen,
+                    onNavigateImage = onNavigateImage
+                )
+            }
+            item {
                 HorizontalDivider()
+                LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
             }
-            Event1(viewModel = viewModel, event = event, onNavigate = onNavigate, onAddScreen = onAddScreen)
-        }
-        item {
-            LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
         }
     }
     LaunchedEffect(id) {
-        viewModel.fetchPastPost(eventFilter)
+        if (eventList.isEmpty()) {
+            viewModel.fetchPastPost(eventFilter)
+        }
     }
 }
 
@@ -1200,7 +1399,7 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
     val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
     Column {
         if (event != null) {
-            Event1(viewModel, event, onNavigate = null, onAddScreen = null)
+            Event1(viewModel, event, onNavigate = null, onAddScreen = null, onNavigateImage = null)
             HorizontalDivider()
         }
         TextField(value = text, onValueChange = {
@@ -1252,7 +1451,7 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
             TextButton(onClick = {
                 val priv = NIP19.parse(privateKey)
                 val pub = NIP19.parse(publicKey)
-                if (text.isNotEmpty() && priv is NIP19.Companion.Data.Sec && pub is NIP19.Companion.Data.Pub) {
+                if (text.isNotEmpty() && priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
                     val ev = when (screen) {
                         is Screen.OwnTimeline -> {
                             val tags = mutableListOf<List<String>>()
@@ -1339,16 +1538,20 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
 
     if (publicKey.isNotEmpty()) {
         val pub = NIP19.parse(publicKey)
-        if (pub is NIP19.Companion.Data.Pub) {
+        if (pub is NIP19.Data.Pub) {
             val metaDataFilter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(pub.id))
             val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
-            val contactsFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))
-            val contacts by viewModel.subscribeReplaceableEvent(contactsFilter).collectAsState()
+            var expandFolloweeList by remember { mutableStateOf(false) }
+            val followeeFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))
+            val followeeListEvent by viewModel.subscribeReplaceableEvent(followeeFilter).collectAsState()
+            var expandFollowerList by remember { mutableStateOf(false) }
+            val followerFilter = Filter(kinds = listOf(Kind.Contacts.num), tags = mapOf("p" to listOf(pub.id)))
+            val followerListEvent by viewModel.subscribeStreamEvent(StreamFilter(id = "follower@${pub.id}", filter = followerFilter)).collectAsState()
             var name by remember { mutableStateOf("") }
             var about by remember { mutableStateOf("") }
             var picture by remember { mutableStateOf("") }
             var nip05 by remember { mutableStateOf("") }
-            val list = remember { mutableStateListOf<Map<String, String>>() }
+            val followeeList = remember { mutableStateListOf<ReplaceableEvent.Contacts.Data>() }
             val listState = rememberLazyListState()
 
             Column(modifier = Modifier.fillMaxHeight()) {
@@ -1404,41 +1607,104 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                         )
                     }
                     item {
-                        HorizontalDivider()
+                        TextButton(onClick = { expandFolloweeList = !expandFolloweeList }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(id = R.string.followee))
+                        }
                     }
-                    if (list.isEmpty()) {
+                    if (expandFolloweeList) {
                         item {
-                            Button(onClick = {
-                                if (list.isEmpty()) {
-                                    list.add(
-                                        mapOf(
-                                            ReplaceableEvent.Contacts.Key.key to pub.id,
-                                            ReplaceableEvent.Contacts.Key.relay to ""
+                            HorizontalDivider()
+                        }
+                        if (followeeList.isEmpty()) {
+                            item {
+                                Button(onClick = {
+                                    if (followeeList.isEmpty()) {
+                                        followeeList.add(
+                                            ReplaceableEvent.Contacts.Data(key = pub.id, relay = "")
                                         )
-                                    )
+                                    }
+                                }) {
+                                    Text(stringResource(id = R.string.follow_self))
                                 }
-                            }) {
-                                Text(stringResource(id = R.string.follow_self))
+                            }
+                        }
+                        else {
+                            items(items = followeeList.distinctBy { it.key }, key = { item ->
+                                "followee@${item.key}"
+                            }) { item ->
+                                val pubKey = item.key
+                                val filter =
+                                    Filter(
+                                        kinds = listOf(Kind.Metadata.num),
+                                        authors = listOf(pubKey)
+                                    )
+                                val meta by viewModel.subscribeReplaceableEvent(filter)
+                                    .collectAsState()
+                                val m = meta
+                                val n =
+                                    if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                        m.data.name
+                                    } else {
+                                        pubKey
+                                    }
+                                HorizontalDivider()
+                                Row {
+                                    Text(modifier = Modifier.weight(1f), text = n)
+                                    Button(onClick = {
+                                        followeeList.remove(item)
+                                    }) {
+                                        Icon(Icons.Filled.Delete, "delete")
+                                    }
+                                }
                             }
                         }
                     }
-                    items(items = list, key = { it[ReplaceableEvent.Contacts.Key.key]!! }) {
-                        val pubKey = it[ReplaceableEvent.Contacts.Key.key]!!
-                        val filter =
-                            Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(pubKey))
-                        val meta by viewModel.subscribeReplaceableEvent(filter).collectAsState()
-                        val m = meta
-                        val n = if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                            m.data.name
-                        } else {
-                            pubKey
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        TextButton(onClick = { expandFollowerList = !expandFollowerList }, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(id = R.string.follower))
                         }
-                        Row {
-                            Text(modifier = Modifier.weight(1f), text = n)
-                            Button(onClick = {
-                                list.remove(it)
-                            }) {
-                                Icon(Icons.Filled.Delete, "delete")
+                    }
+                    if (expandFollowerList) {
+                        items(items = followerListEvent.distinctBy { it.pubkey }, key = { item ->
+                            "follower@${item.pubkey}"
+                        }) { item ->
+                            val filter =
+                                Filter(
+                                    kinds = listOf(Kind.Metadata.num),
+                                    authors = listOf(item.pubkey)
+                                )
+                            val meta by viewModel.subscribeReplaceableEvent(filter)
+                                .collectAsState()
+                            val m = meta
+                            val n =
+                                if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                    m.data.name
+                                } else {
+                                    item.pubkey
+                                }
+                            HorizontalDivider()
+                            Row {
+                                Text(modifier = Modifier.weight(1f), text = n)
+                                if (followeeList.isEmpty() || followeeList.none {it.key == item.pubkey}) {
+                                    Button(onClick = {
+                                        followeeList.add(ReplaceableEvent.Contacts.Data(key = item.pubkey))
+                                    }) {
+                                        Icon(Icons.Filled.Add, "add")
+                                    }
+                                }
+                            }
+                        }
+                        item {
+                            HorizontalDivider()
+                        }
+                        item {
+                            TextButton(onClick = {
+                                viewModel.fetchPastPost(followerFilter)
+                            }, modifier = Modifier.fillMaxWidth()) {
+                                Text(stringResource(id = R.string.load_more))
                             }
                         }
                     }
@@ -1446,7 +1712,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                 if (privateKey.isNotEmpty()) {
                     Button(onClick = {
                         val priv = NIP19.parse(privateKey)
-                        if (priv is NIP19.Companion.Data.Sec) {
+                        if (priv is NIP19.Data.Sec) {
                             val json = JSONObject()
                             json.put("name", name)
                             json.put("about", about)
@@ -1472,29 +1738,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                                         ).show()
                                     }
                                 })
-                            val tags = mutableListOf<List<String>>()
-                            for (tag in list) {
-                                tags.add(
-                                    listOf(
-                                        "p",
-                                        tag[ReplaceableEvent.Contacts.Key.key] ?: "",
-                                        tag[ReplaceableEvent.Contacts.Key.relay] ?: "",
-                                        tag[ReplaceableEvent.Contacts.Key.petname] ?: ""
-                                    )
-                                )
-                            }
-                            val contactsEvent = Event(
-                                kind = Kind.Contacts.num,
-                                content = "",
-                                createdAt = System.currentTimeMillis() / 1000,
-                                pubkey = pub.id,
-                                tags = tags
-                            )
-                            contactsEvent.id = Event.generateHash(contactsEvent, false)
-                            contactsEvent.sig = Event.sign(contactsEvent, priv.id)
-                            viewModel.post(
-                                contactsEvent,
-                                onSuccess = {},
+                            Misc.postContacts(viewModel, followeeList, priv, pub, onSuccess = {},
                                 onFailure = { url, reason ->
                                     coroutineScope.launch(Dispatchers.Main) {
                                         Toast.makeText(
@@ -1522,12 +1766,12 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                     nip05 = data.nip05.domain
                 }
             }
-            LaunchedEffect(contacts) {
-                val c = contacts
+            LaunchedEffect(followeeListEvent) {
+                val c = followeeListEvent
                 if (c is LoadingData.Valid && c.data is ReplaceableEvent.Contacts) {
                     val data = c.data
-                    list.clear()
-                    list.addAll(data.list)
+                    followeeList.clear()
+                    followeeList.addAll(data.list.distinctBy { it.key })
                 }
             }
         }
@@ -1656,7 +1900,7 @@ fun Setting(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                 }
                 else if (inputPrivateKey.startsWith(NIP19.NPUB)) {
                     val pub = NIP19.parse(inputPrivateKey)
-                    if (pub !is NIP19.Companion.Data.Pub) {
+                    if (pub !is NIP19.Data.Pub) {
                         valid = false
                     }
                     pubKey = inputPrivateKey

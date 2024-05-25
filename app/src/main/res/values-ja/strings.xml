@@ -57,4 +57,13 @@
     <string name="follow_someone">誰かをフォローしてください</string>
     <string name="view_profile">プロフを見る</string>
     <string name="error_failed_to_open_post_screen">投稿画面の表示に失敗しました</string>
+    <string name="followee">フォロイー</string>
+    <string name="follower">フォロワー</string>
+    <string name="check">確認</string>
+    <string name="follow">フォロー</string>
+    <string name="unfollow">フォローを外す</string>
+    <string name="error_failed_to_refresh_contacts">コンタクトの更新に失敗しました</string>
+    <string name="error_invalid_image">無効な画像ファイルです</string>
+    <string name="not_loading">未ローディング</string>
+    <string name="error_invalid_data">無効なデータ: %s</string>
 </resources>

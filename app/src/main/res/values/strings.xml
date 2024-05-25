@@ -67,6 +67,15 @@
     <string name="follow_someone">follow someone</string>
     <string name="view_profile">view profile</string>
     <string name="error_failed_to_open_post_screen">failed to open post screen</string>
+    <string name="followee">followee</string>
+    <string name="follower">follower</string>
+    <string name="check">check</string>
+    <string name="error_failed_to_refresh_contacts">failed to refresh contacts</string>
+    <string name="follow">follow</string>
+    <string name="unfollow">unfollow</string>
+    <string name="error_invalid_image">invalid image</string>
+    <string name="not_loading">not loading</string>
+    <string name="error_invalid_data">invalid data: %s</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove
