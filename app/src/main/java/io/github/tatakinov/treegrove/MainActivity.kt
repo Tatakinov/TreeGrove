@@ -68,7 +68,6 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
-import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -750,38 +749,25 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
     if (list.isNotEmpty()) {
         val listState = rememberLazyListState()
         val event = list.first()
-        val parentList = event.tags.filter {
+        val parentIDList = event.tags.filter {
             it.size >= 2 && it[0] == "e"
         }.map { it[1] }.distinctBy { it }
-        val parentVisibleMap = remember { mutableStateMapOf<String, Boolean>() }
+        val parentFilter = Filter(ids = parentIDList)
+        val parentEventList by viewModel.subscribeOneShotEvent(parentFilter).collectAsState()
         val childFilter = Filter(kinds = listOf(event.kind), tags = mapOf("e" to listOf(event.id)))
         val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
         LazyColumn(state = listState) {
-            items(items = parentList, key = { it }) {
-                if (parentVisibleMap[it] == true) {
-                    val f = Filter(ids = listOf(it))
-                    val el by viewModel.subscribeOneShotEvent(f).collectAsState()
-                    val e = el
-                    if (e.isNotEmpty()) {
-                        Event1(viewModel, e.first(), onNavigate, onAddScreen = onAddScreen, onNavigateImage)
-                    }
-                    else {
-                        Text(it)
-                    }
-                }
-                else {
-                    TextButton(onClick = {
-                        parentVisibleMap[it] = true
-                    }) {
-                        Text(it)
-                    }
-                }
+            items(items = parentEventList.filter { it.kind == Kind.Text.num || it.kind == Kind.ChannelMessage.num }.sortedBy {it.createdAt },
+                key = { it.toJSONObject().toString() }) {
+                Event1(viewModel, it, onNavigate, onAddScreen = onAddScreen, onNavigateImage)
             }
             item {
                 Event1(viewModel, event, onNavigate, onAddScreen, onNavigateImage, isFocused = true)
             }
             val el = childEventList
-            items(items = el, key = { it.toJSONObject().toString() }) {
+            items(items = el.filter {
+                it.kind == Kind.Text.num || it.kind == Kind.ChannelMessage.num
+            }.sortedBy { it.createdAt }, key = { it.toJSONObject().toString() }) {
                 Event1(viewModel, it, onNavigate, onAddScreen, onNavigateImage)
             }
         }
@@ -1768,7 +1754,7 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                             val tags = mutableListOf<List<String>>()
                             if (event != null) {
                                 for (tag in event.tags) {
-                                    if (tag.size >= 2 && tag[0] == "p") {
+                                    if (tag.size >= 2 && (tag[0] == "p" || tag[0] == "e")) {
                                         tags.add(tag)
                                     }
                                 }
@@ -1791,7 +1777,7 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                             val tags = mutableListOf<List<String>>()
                             if (event != null) {
                                 for (tag in event.tags) {
-                                    if (tag.size >= 2 && tag[0] == "p") {
+                                    if (tag.size >= 2 && (tag[0] == "p" || tag[0] == "e")) {
                                         tags.add(tag)
                                     }
                                 }
