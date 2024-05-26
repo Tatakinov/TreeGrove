@@ -1,6 +1,7 @@
 package io.github.tatakinov.treegrove.nostr
 
 import fr.acinq.secp256k1.Hex
+import okhttp3.internal.toHexString
 import kotlin.Exception
 
 object NIP19 {
@@ -112,6 +113,45 @@ object NIP19 {
             result[t]!!.add(v.toByteArray())
         }
         return result
+    }
+
+    private fun toTLV(map: Map<Int, List<ByteArray>>): ByteArray {
+        val list = mutableListOf<Byte>()
+        for ((k, v) in map) {
+            for (b in v) {
+                list.add(k.toByte())
+                list.add(b.size.toByte())
+                list.addAll(b.toList())
+            }
+        }
+        return list.toByteArray()
+    }
+
+    fun toString(event: Event): String {
+        when (event.kind) {
+            Kind.Text.num -> {
+                val data = Hex.decode(event.id)
+                return encode("note", data)
+            }
+            Kind.ChannelCreation.num -> {
+                val map = mutableMapOf(0 to listOf(Hex.decode(event.id)))
+                map[2] = listOf(Hex.decode(event.pubkey))
+                map[3] = listOf(Hex.decode(event.kind.toHexString()))
+                val tlv = toTLV(map)
+                return encode("nevent", tlv)
+            }
+            Kind.ChannelMessage.num -> {
+                val map = mutableMapOf(0 to listOf(Hex.decode(event.id)))
+                map[2] = listOf(Hex.decode(event.pubkey))
+                map[3] = listOf(Hex.decode(event.kind.toHexString()))
+                val tlv = toTLV(map)
+                return encode("nevent", tlv)
+            }
+            else -> {
+                // TODo stub
+                return ""
+            }
+        }
     }
 
     fun encode(hrp: String, data: ByteArray): String {

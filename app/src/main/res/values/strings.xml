@@ -76,6 +76,9 @@
     <string name="error_invalid_image">invalid image</string>
     <string name="not_loading">not loading</string>
     <string name="error_invalid_data">invalid data: %s</string>
+    <string name="detail">detail</string>
+    <string name="copy_nevent">copy nevent</string>
+    <string name="copied_nevent">copied nevent: %s</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

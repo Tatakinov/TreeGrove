@@ -15,9 +15,10 @@ class Downloader(private val onTransmit: (String, Int) -> Unit) {
         val client = if (allowRedirect) { HttpClient.default } else { HttpClient.noRedirect }
         val response = client.newCall(request).execute()
         onTransmit(url, response.toString().toByteArray().size)
-        val data = response.body
+        val data = response.body?.bytes()
         val loadingData = if (data != null) {
-            LoadingData.Valid(data.bytes())
+            onTransmit(url, data.size)
+            LoadingData.Valid(data)
         }
         else {
             LoadingData.Invalid(LoadingData.Reason.NotFound)

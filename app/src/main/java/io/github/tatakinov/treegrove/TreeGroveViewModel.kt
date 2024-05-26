@@ -39,9 +39,11 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
     private val _dataCache = mutableMapOf<String, MutableStateFlow<LoadingData<ByteArray>>>()
     private val _eventHashCache = hashSetOf<Event>()
     private val _eventCache = mutableListOf<EventInfo>()
-    private val _streamEventCache = mutableMapOf<Filter, MutableStateFlow<List<Event>>>()
-    private val _replaceableEventCache = mutableMapOf<Filter, MutableStateFlow<LoadingData<ReplaceableEvent>>>()
-    private val _oneShotEventCache = mutableMapOf<Filter, MutableStateFlow<LoadingData<Event>>>()
+    private val _oneShotEventHashCache = hashSetOf<Event>()
+    private val _oneShotEventCache = mutableListOf<EventInfo>()
+    private val _streamEventMap = mutableMapOf<Filter, MutableStateFlow<List<Event>>>()
+    private val _replaceableEventMap = mutableMapOf<Filter, MutableStateFlow<LoadingData<ReplaceableEvent>>>()
+    private val _oneShotEventMap = mutableMapOf<Filter, MutableStateFlow<List<Event>>>()
     private val _streamFilterSet = mutableSetOf<StreamFilter>()
     private var fetchSize: Long = 0
     private var _transmittedSizeFlow = MutableStateFlow(0)
@@ -69,28 +71,26 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         }
     }
 
-    private suspend fun addEventCache(url: String, event: Event) {
-        _mutexCache.withLock {
-            if (!_eventHashCache.contains(event)) {
-                _eventHashCache.add(event)
-                _eventCache.add(EventInfo(listOf(url), event))
-            }
-            else {
-                for (i in _eventCache.indices) {
-                    if (_eventCache[i].event == event && !_eventCache[i].from.contains(url)) {
-                        val list = mutableListOf<String>().apply {
-                            addAll(_eventCache[i].from)
-                            add(url)
-                        }
-                        _eventCache[i] = _eventCache[i].copy(from = list)
-                        break
+    private suspend fun addEventCache(cacheSet: MutableSet<Event>, cache: MutableList<EventInfo>, url: String, event: Event) {
+        if (!cacheSet.contains(event)) {
+            cacheSet.add(event)
+            cache.add(EventInfo(listOf(url), event))
+        }
+        else {
+            for (i in cache.indices) {
+                if (cache[i].event == event && !cache[i].from.contains(url)) {
+                    val list = mutableListOf<String>().apply {
+                        addAll(cache[i].from)
+                        add(url)
                     }
+                    cache[i] = cache[i].copy(from = list)
+                    break
                 }
             }
         }
         if (event.kind == Kind.ChannelCreation.num) {
             val e = Event(kind = Kind.ChannelMetadata.num, content = event.content, createdAt = event.createdAt, pubkey = event.pubkey, tags = listOf(listOf("e", event.id)),)
-            addEventCache(url, e)
+            addEventCache(cacheSet, cache, url, e)
         }
     }
 
@@ -98,11 +98,11 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         val streamKeySet = mutableSetOf<Filter>()
         val replaceableKeySet = mutableSetOf<Filter>()
         _mutexFlow.withLock {
-            streamKeySet.addAll(_streamEventCache.keys)
-            replaceableKeySet.addAll(_replaceableEventCache.keys)
+            streamKeySet.addAll(_streamEventMap.keys)
+            replaceableKeySet.addAll(_replaceableEventMap.keys)
         }
         for (k in streamKeySet) {
-            val v = _streamEventCache[k]
+            val v = _streamEventMap[k]
             v?.let { flow ->
                 val l = _eventCache.filter { k.cond(it.event) }.map { it.event }
                 if (flow.value.size < l.size) {
@@ -111,7 +111,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             }
         }
         for (k in replaceableKeySet) {
-            val v = _replaceableEventCache[k]
+            val v = _replaceableEventMap[k]
             v?.let { flow ->
                 val e = _eventCache.filter { k.cond(it.event) }.map { it.event }.firstOrNull()
                 val r = e?.let {
@@ -166,8 +166,8 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
 
                             override fun onEvent(relay: Relay, event: Event) {
                                 viewModelScope.launch {
-                                    addEventCache(relay.url(), event)
                                     _mutexCache.withLock {
+                                        addEventCache(_eventHashCache, _eventCache, relay.url(), event)
                                         _eventCache.sortByDescending { it.event.createdAt }
                                     }
                                     updateEventCache()
@@ -276,14 +276,14 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                 else {
                     filter = streamFilter.filter
                 }
-                if (streamFilter.id != "invalid" && !_streamEventCache.containsKey(streamFilter.filter)) {
+                if (streamFilter.id != "invalid" && !_streamEventMap.containsKey(streamFilter.filter)) {
                     _streamFilterSet.add(streamFilter)
                 }
-                _streamEventCache[streamFilter.filter] = MutableStateFlow(listOf())
+                _streamEventMap[streamFilter.filter] = MutableStateFlow(listOf())
             }
             sendStream()
         }
-        return _streamEventCache[filter]!!
+        return _streamEventMap[filter]!!
     }
 
     fun unsubscribeStreamEvent(streamFilter: StreamFilter) {
@@ -311,8 +311,11 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                     relay.sendOneShot(filter.copy(limit = fetchSizeFlow.value, until = until),
                         onReceive = { url, eventList ->
                             viewModelScope.launch {
-                                for (event in eventList) {
-                                    addEventCache(url, event)
+                                _mutexCache.withLock {
+                                    for (event in eventList) {
+                                        addEventCache(_eventHashCache, _eventCache, url, event)
+                                    }
+                                    _eventCache.sortByDescending { it.event.createdAt }
                                 }
                                 updateEventCache()
                             }
@@ -417,20 +420,20 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
     fun subscribeReplaceableEvent(filter: Filter): StateFlow<LoadingData<ReplaceableEvent>> {
         runBlocking {
             _mutexFlow.withLock {
-                if (_replaceableEventCache.containsKey(filter)) {
+                if (_replaceableEventMap.containsKey(filter)) {
                     return@runBlocking
                 }
                 else {
-                    _replaceableEventCache[filter] = MutableStateFlow(LoadingData.Loading())
+                    _replaceableEventMap[filter] = MutableStateFlow(LoadingData.Loading())
                 }
             }
             viewModelScope.launch {
                 addOneShot(filter.copy(limit = 1), onReceive = { url, eventList ->
                     viewModelScope.launch {
-                        for (event in eventList) {
-                            addEventCache(url, event)
-                        }
                         _mutexCache.withLock {
+                            for (event in eventList) {
+                                addEventCache(_eventHashCache, _eventCache, url, event)
+                            }
                             _eventCache.sortByDescending { it.event.createdAt }
                         }
                         updateEventCache()
@@ -438,40 +441,37 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                 })
             }
         }
-        return _replaceableEventCache[filter]!!
+        return _replaceableEventMap[filter]!!
     }
 
-    fun subscribeOneShotEvent(filter: Filter): StateFlow<LoadingData<Event>> {
-        if (_oneShotEventCache.containsKey(filter)) {
-            return _oneShotEventCache[filter]!!
-        }
-        val eventCache = MutableStateFlow<LoadingData<Event>>(LoadingData.Loading())
-        viewModelScope.launch {
-            _mutexFlow.withLock {
-                if (!_oneShotEventCache.containsKey(filter)) {
-                    _oneShotEventCache[filter] = eventCache
+    fun subscribeOneShotEvent(filter: Filter): StateFlow<List<Event>> {
+        runBlocking {
+            _mutexCache.withLock {
+                if (_oneShotEventMap.containsKey(filter)) {
+                    return@runBlocking
+                }
+                else {
+                    _oneShotEventMap[filter] = MutableStateFlow(listOf())
+                    addOneShot(filter.copy(limit = fetchSize), onReceive = { url, eventList ->
+                        viewModelScope.launch {
+                            _mutexCache.withLock {
+                                for (event in eventList) {
+                                    addEventCache(_oneShotEventHashCache, _oneShotEventCache, url, event)
+                                }
+                                _oneShotEventCache.sortByDescending { it.event.createdAt }
+                            }
+                            for ((k, v) in _oneShotEventMap) {
+                                val l = _oneShotEventCache.filter { k.cond(it.event) }.map { it.event }
+                                if (l.size > v.value.size) {
+                                    v.update { l }
+                                }
+                            }
+                        }
+                    })
                 }
             }
         }
-        viewModelScope.launch {
-            addOneShot(filter.copy(limit = 1), onReceive = { url, eventList ->
-                viewModelScope.launch {
-                    if (eventList.isNotEmpty()) {
-                        val event = eventList.maxByOrNull { it.createdAt }
-                        event?.let {
-                            eventCache.update {
-                                LoadingData.Valid(event)
-                            }
-                        }
-                    } else if (eventCache.value is LoadingData.Loading) {
-                        eventCache.update {
-                            LoadingData.Invalid(LoadingData.Reason.NotFound)
-                        }
-                    }
-                }
-            })
-        }
-        return eventCache
+        return _oneShotEventMap[filter]!!
     }
 
     fun post(event: Event, onSuccess: () -> Unit, onFailure: (String, String) -> Unit) {

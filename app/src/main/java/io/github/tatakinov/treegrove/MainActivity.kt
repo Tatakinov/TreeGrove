@@ -13,7 +13,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,7 +31,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
@@ -41,17 +39,20 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -87,12 +88,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -163,6 +165,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun Main(viewModel: TreeGroveViewModel) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     val navController = rememberNavController()
     NavHost(navController = navController, startDestination = "home") {
         composable("home") {
@@ -178,7 +181,13 @@ fun Main(viewModel: TreeGroveViewModel) {
                         navController.navigate("post?class=Timeline&id=${s.id}&event=${e}")
                     }
                     is Screen.Channel -> {
-                        navController.navigate("post?class=Channel&id=${s.id}&pubKey=${s.pubKey}&event=${e}")
+                        navController.navigate("post?class=Channel&id=${s.id}&pubkey=${s.pubkey}&event=${e}")
+                    }
+                    is Screen.EventDetail -> {
+                        navController.navigate("post?class=EventDetail&id=${s.id}&pubkey=${s.pubkey}&event=${e}")
+                    }
+                    is Screen.ChannelEventDetail -> {
+                        navController.navigate("post?class=ChannelEventDetail&id=${s.id}&pubkey=${s.pubkey}&channel=${s.channelID}&event=${e}")
                     }
                 }
             }, onNavigateProfile = {
@@ -207,10 +216,11 @@ fun Main(viewModel: TreeGroveViewModel) {
                 navController.popBackStack()
             }
         }
-        composable("post?class={class}&id={id}&pubKey={pubKey}&event={event}") {
+        composable("post?class={class}&id={id}&pubkey={pubkey}&channel={channel}&event={event}") {
             val c = it.arguments?.getString("class") ?: ""
             val id = it.arguments?.getString("id") ?: ""
-            val pubKey = it.arguments?.getString("pubKey") ?: ""
+            val pubkey = it.arguments?.getString("pubkey") ?: ""
+            val channel = it.arguments?.getString("channel") ?: ""
             val e = URLDecoder.decode(it.arguments?.getString("event") ?: "", "UTF-8")
             val event = try {
                 val json = JSONObject(e)
@@ -223,8 +233,24 @@ fun Main(viewModel: TreeGroveViewModel) {
                 "OwnTimeline" -> { Screen.OwnTimeline(id) }
                 "Timeline" -> { Screen.Timeline(id) }
                 "Channel" -> {
-                    if (pubKey.isNotEmpty()) {
-                        Screen.Channel(id, pubKey)
+                    if (pubkey.isNotEmpty()) {
+                        Screen.Channel(id, pubkey)
+                    }
+                    else {
+                        null
+                    }
+                }
+                "EventDetail" -> {
+                    if (pubkey.isNotEmpty()) {
+                        Screen.EventDetail(id = id, pubkey = pubkey)
+                    }
+                    else {
+                        null
+                    }
+                }
+                "ChannelEventDetail" -> {
+                    if (pubkey.isNotEmpty() && channel.isNotEmpty()) {
+                        Screen.ChannelEventDetail(id = id, pubkey = pubkey, channelID = channel)
                     }
                     else {
                         null
@@ -238,8 +264,7 @@ fun Main(viewModel: TreeGroveViewModel) {
                 })
             }
             else {
-                Toast.makeText(context, stringResource(id = R.string.error_failed_to_open_post_screen), Toast.LENGTH_SHORT).show()
-                navController.popBackStack()
+                Text(stringResource(id = R.string.error_failed_to_open_post_screen))
             }
         }
     }
@@ -274,9 +299,11 @@ fun ImageViewer(viewModel: TreeGroveViewModel, url: String) {
 sealed class Screen(val icon : ImageVector) {
     abstract val id: String
 
-    data class OwnTimeline(override val id: String): Screen(icon = Icons.Filled.Done)
-    data class Timeline(override val id: String): Screen(icon = Icons.Filled.Done)
-    data class Channel(override val id: String, val pubKey: String): Screen(icon = Icons.Filled.Add)
+    data class OwnTimeline(override val id: String): Screen(icon = Icons.Filled.Home)
+    data class Timeline(override val id: String): Screen(icon = Icons.Filled.Person)
+    data class Channel(override val id: String, val pubkey: String): Screen(icon = Icons.Filled.Add)
+    data class EventDetail(override val id: String, val pubkey: String): Screen(icon = Icons.Filled.Info)
+    data class ChannelEventDetail(override val id: String, val pubkey: String, val channelID: String): Screen(icon = Icons.Filled.Info)
 }
 
 @Composable
@@ -343,8 +370,13 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
             is Screen.Channel -> {
                 StreamFilter(id = "channel@${screen.id}", Filter(kinds = listOf(Kind.ChannelMessage.num), tags = mapOf("e" to listOf(screen.id))))
             }
+            else -> {
+                null
+            }
         }
-        viewModel.unsubscribeStreamEvent(filter)
+        if (filter != null) {
+            viewModel.unsubscribeStreamEvent(filter)
+        }
     }
     ModalNavigationDrawer(drawerState = drawerState, drawerContent = {
         val relayInfoList by viewModel.relayInfoListFlow.collectAsState()
@@ -638,9 +670,34 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                         }
 
                         is Screen.Channel -> {
-                            Channel(viewModel, screen.id, screen.pubKey, onNavigate = {
+                            Channel(viewModel, screen.id, screen.pubkey, onNavigate = {
                                 onNavigatePost(screen, it)
                             }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                        }
+                        is Screen.EventDetail -> {
+                            EventDetail(
+                                viewModel = viewModel,
+                                id = screen.id,
+                                pubkey = screen.pubkey,
+                                onNavigate = {
+                                    onNavigatePost(screen, it)
+                                },
+                                onAddScreen = onAddScreen,
+                                onNavigateImage = onNavigateImage
+                            )
+                        }
+                        is Screen.ChannelEventDetail -> {
+                            ChannelEventDetail(
+                                viewModel = viewModel,
+                                id = screen.id,
+                                pubkey = screen.pubkey,
+                                channelID = screen.channelID,
+                                onNavigate = {
+                                    onNavigatePost(screen, it)
+                                },
+                                onAddScreen = onAddScreen,
+                                onNavigateImage = onNavigateImage
+                            )
                         }
                     }
                 }
@@ -678,8 +735,68 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
 }
 
 @Composable
-fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?, onNavigateImage: ((String) -> Unit)?) {
+fun ChannelEventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, channelID: String,
+                       onNavigate: (Event) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
+    EventDetail(viewModel, id, pubkey, onNavigate, onAddScreen, onNavigateImage)
+}
+
+@Composable
+fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNavigate: (Event) -> Unit,
+                onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
+    val filter = Filter(ids = listOf(id), authors = listOf(pubkey))
+    val eventList by viewModel.subscribeOneShotEvent(filter).collectAsState()
+    val list = eventList
+
+    if (list.isNotEmpty()) {
+        val listState = rememberLazyListState()
+        val event = list.first()
+        val parentList = event.tags.filter {
+            it.size >= 2 && it[0] == "e"
+        }.map { it[1] }.distinctBy { it }
+        val parentVisibleMap = remember { mutableStateMapOf<String, Boolean>() }
+        val childFilter = Filter(kinds = listOf(event.kind), tags = mapOf("e" to listOf(event.id)))
+        val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
+        LazyColumn(state = listState) {
+            items(items = parentList, key = { it }) {
+                if (parentVisibleMap[it] == true) {
+                    val f = Filter(ids = listOf(it))
+                    val el by viewModel.subscribeOneShotEvent(f).collectAsState()
+                    val e = el
+                    if (e.isNotEmpty()) {
+                        Event1(viewModel, e.first(), onNavigate, onAddScreen = onAddScreen, onNavigateImage)
+                    }
+                    else {
+                        Text(it)
+                    }
+                }
+                else {
+                    TextButton(onClick = {
+                        parentVisibleMap[it] = true
+                    }) {
+                        Text(it)
+                    }
+                }
+            }
+            item {
+                Event1(viewModel, event, onNavigate, onAddScreen, onNavigateImage, isFocused = true)
+            }
+            val el = childEventList
+            items(items = el, key = { it.toJSONObject().toString() }) {
+                Event1(viewModel, it, onNavigate, onAddScreen, onNavigateImage)
+            }
+        }
+    }
+}
+
+@Composable
+fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?,
+           onNavigateImage: ((String) -> Unit)?, isFocused: Boolean = false) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
     val userMetaDataMap = remember { mutableStateMapOf<String, State<LoadingData<ReplaceableEvent>>>() }
+    val pubkeyMap = remember { mutableStateMapOf<String ,String>() }
+    val channelMap = remember { mutableStateMapOf<String, String>() }
     val uriHandler = LocalUriHandler.current
     val date = Date(event.createdAt * 1000)
     val format = SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
@@ -687,14 +804,16 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
     var expanded by remember { mutableStateOf(false) }
     var i = 0
     while (i < event.content.length) {
-        val pos = event.content.indexOf("nostr:npub", i)
+        val pos = event.content.indexOf("nostr:", i)
         if (pos == -1) {
             break
         }
         Log.d("debug", event.content.substring(pos))
-        val match = "^nostr:npub1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
-        if (match != null) {
-            val pub = NIP19.parse(match.value.substring(6))
+        val npubMatch = "^nostr:npub1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
+        val noteMatch = "^nostr:note1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
+        val neventMatch = "^nostr:nevent1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
+        if (npubMatch != null) {
+            val pub = NIP19.parse(npubMatch.value.substring(6))
             if (pub is NIP19.Data.Pub && !userMetaDataMap.containsKey(pub.id)) {
                 userMetaDataMap[pub.id] = viewModel.subscribeReplaceableEvent(
                     Filter(
@@ -703,8 +822,63 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                     )
                 ).collectAsState()
             }
-            i = pos + match.value.length
-        } else {
+            i = pos + npubMatch.value.length
+        }
+        else if (noteMatch != null) {
+            val e = NIP19.parse(noteMatch.value.substring(6))
+            if (e is NIP19.Data.Note) {
+                val f = Filter(ids = listOf(e.id))
+                val eventList by viewModel.subscribeOneShotEvent(f).collectAsState()
+                if (eventList.isNotEmpty()) {
+                    val ev = eventList.first()
+                    if (ev.kind == Kind.Text.num) {
+                        pubkeyMap[e.id] = ev.pubkey
+                    }
+                }
+            }
+            i = pos + noteMatch.value.length
+        }
+        else if (neventMatch != null) {
+            val e = NIP19.parse(neventMatch.value.substring(6))
+            if (e is NIP19.Data.Event) {
+                val ids = listOf(e.id)
+                val kinds = if (e.kind != null) {
+                    listOf(e.kind)
+                }
+                else {
+                    listOf()
+                }
+                val authors = if (e.author != null) {
+                    listOf(e.author)
+                }
+                else {
+                    listOf()
+                }
+                val f = Filter(ids = ids, kinds = kinds, authors = authors)
+                val eventList by viewModel.subscribeOneShotEvent(f).collectAsState()
+                if (eventList.isNotEmpty()) {
+                    val ev = eventList.first()
+                    if (ev.kind == Kind.ChannelMessage.num) {
+                        val eTagList = ev.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                        if (eTagList.isNotEmpty()) {
+                            val channelFilter =
+                                Filter(ids = eTagList, kinds = listOf(Kind.ChannelCreation.num))
+                            val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
+                                .collectAsState()
+                            if (channelEvent.isNotEmpty()) {
+                                pubkeyMap[e.id] = ev.pubkey
+                                channelMap[e.id] = channelEvent.first().id
+                            }
+                        }
+                    }
+                    else {
+                        pubkeyMap[e.id] = ev.pubkey
+                    }
+                }
+            }
+            i = pos + neventMatch.value.length
+        }
+        else {
             i = pos + 1
         }
     }
@@ -733,18 +907,37 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                 "^nostr:note1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
                     val note = NIP19.parse(value.substring(6))
                     if (note is NIP19.Data.Note) {
-                        pushStringAnnotation(tag = "nevent", annotation = value)
-                        withStyle(style = SpanStyle(color = Color.Green)) {
-                            append(value)
+                        if (pubkeyMap.containsKey(note.id)) {
+                            pushStringAnnotation(tag = "nevent", annotation = value)
+                            withStyle(style = SpanStyle(color = Color.Green)) {
+                                append(value)
+                            }
+                            pop()
+                            return@label true
                         }
-                        pop()
-                        return@label true
                     }
                     return@label false
                 },
                 "^nostr:nevent1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
                     val nevent = NIP19.parse(value.substring(6))
                     if (nevent is NIP19.Data.Event) {
+                        if (pubkeyMap.containsKey(nevent.id)) {
+                            pushStringAnnotation(tag = "nevent", annotation = value)
+                            withStyle(style = SpanStyle(color = Color.Green)) {
+                                append(value)
+                            }
+                            pop()
+                            return@label true
+                        }
+                        else {
+                            // TODO invalid nevent?
+                        }
+                    }
+                    return@label true
+                },
+                "^nostr:nprofile1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex() to label@{ value ->
+                    val nevent = NIP19.parse(value.substring(6))
+                    if (nevent is NIP19.Data.Profile) {
                         pushStringAnnotation(tag = "nevent", annotation = value)
                         withStyle(style = SpanStyle(color = Color.Green)) {
                             append(value)
@@ -818,10 +1011,18 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
             }
         }
     Box(modifier = Modifier.padding(top = 5.dp, bottom = 5.dp)) {
-        Column(modifier = Modifier
-            .padding(start = 10.dp, end = 10.dp)
-            .clickable { expanded = true }) {
-            /*
+        Card(colors = CardDefaults.cardColors(
+            containerColor = if (isFocused) {
+                MaterialTheme.colorScheme.primaryContainer
+            }
+            else {
+                MaterialTheme.colorScheme.surface
+            }
+        )) {
+            Column(modifier = Modifier
+                .padding(start = 10.dp, end = 10.dp)
+                .clickable { expanded = true }) {
+                /*
         名前が短いときは
         hoge             2000/01/01 00:00:00
         となり
@@ -832,116 +1033,144 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
         となってしまうので仕方無しに右から決まるようにした。
         絶対なんかもっとスマートな解決方法があるはず…
          */
-            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val filter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(event.pubkey))
-                    val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
-                    val m = metaData
-                    /*
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val filter = Filter(
+                            kinds = listOf(Kind.Metadata.num),
+                            authors = listOf(event.pubkey)
+                        )
+                        val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
+                        val m = metaData
+                        /*
                 Rtlのままだと
                 00:00:00 2000/01/01
                 となるので一時的にLtrに戻す
                  */
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Text(d, fontSize = 12.sp, maxLines = 1)
-                    }
-                    Spacer(modifier = Modifier.weight(1f))
-                    if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData &&
-                        m.data.nip05.identify is LoadingData.Valid && m.data.nip05.identify.data
-                    ) {
-                        Icon(
-                            Icons.Filled.CheckCircle,
-                            "verified",
-                            modifier = Modifier.height(12.dp)
-                        )
-                    }
-                    /*
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            Text(d, fontSize = 12.sp, maxLines = 1)
+                        }
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData &&
+                            m.data.nip05.identify is LoadingData.Valid && m.data.nip05.identify.data
+                        ) {
+                            Icon(
+                                Icons.Filled.CheckCircle,
+                                "verified",
+                                modifier = Modifier.height(12.dp)
+                            )
+                        }
+                        /*
                 Rtlのままだと左端が切れるので一時的にLtrに戻す
                  */
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        val name =
-                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                                m.data.name
-                            } else {
-                                val data = Hex.decode(event.pubkey)
-                                NIP19.encode(NIP19.NPUB, data)
-                            }
-                        Text(
-                            name,
-                            fontSize = 12.sp,
-                            overflow = TextOverflow.Ellipsis,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-            var text = ""
-            for (tag in event.tags) {
-                if (tag.size >= 2 && tag[0] == "p") {
-                    val metaData by viewModel.subscribeReplaceableEvent(
-                        Filter(
-                            kinds = listOf(Kind.Metadata.num),
-                            authors = listOf(tag[1])
-                        )
-                    ).collectAsState()
-                    val m = metaData
-                    if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                        text += "@${m.data.name} "
-                    }
-                }
-            }
-            if (text.isNotEmpty()) {
-                Text(text.substring(0, text.length - 1), fontSize = 10.sp, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 0.dp))
-            }
-            ClickableText(text = annotated, onClick = { offset ->
-                var tapped = false
-                annotated.getStringAnnotations(tag = "image", start = offset, end = offset)
-                    .firstOrNull()?.let {
-                        if (onNavigateImage != null) {
-                            onNavigateImage(it.item)
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                            val name =
+                                if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                    m.data.name
+                                } else {
+                                    val data = Hex.decode(event.pubkey)
+                                    NIP19.encode(NIP19.NPUB, data)
+                                }
+                            Text(
+                                name,
+                                fontSize = 12.sp,
+                                overflow = TextOverflow.Ellipsis,
+                                maxLines = 1
+                            )
                         }
                     }
-                annotated.getStringAnnotations(tag = "url", start = offset, end = offset)
-                    .firstOrNull()?.let {
-                        uriHandler.openUri(it.item)
-                        tapped = true
+                }
+                var text = ""
+                for (tag in event.tags) {
+                    if (tag.size >= 2 && tag[0] == "p") {
+                        val metaData by viewModel.subscribeReplaceableEvent(
+                            Filter(
+                                kinds = listOf(Kind.Metadata.num),
+                                authors = listOf(tag[1])
+                            )
+                        ).collectAsState()
+                        val m = metaData
+                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                            text += "@${m.data.name} "
+                        }
                     }
-                annotated.getStringAnnotations(tag = "nevent", start = offset, end = offset)
-                    .firstOrNull()?.let {
-                        val data = NIP19.parse(it.item)
-                        var screen: Screen? = null
-                        when (data) {
-                            is NIP19.Data.Note -> {
-                                // TODO single event
-                            }
-                            is NIP19.Data.Event -> {
-                                when (data.kind) {
-                                    Kind.Text.num -> {
-                                        // TODO single event
-                                    }
-                                    Kind.ChannelCreation.num -> {
-                                        if (data.author != null) {
-                                            screen =
-                                                Screen.Channel(id = data.id, pubKey = data.author)
-                                        }
-                                    }
-                                    Kind.ChannelMessage.num -> {
-                                        // TODO single event
-                                    }
-                                    else -> {}
+                }
+                if (text.isNotEmpty()) {
+                    Text(
+                        text.substring(0, text.length - 1),
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(top = 0.dp)
+                    )
+                }
+                ClickableText(
+                    text = annotated,
+                    onClick = { offset ->
+                        var tapped = false
+                        annotated.getStringAnnotations(tag = "image", start = offset, end = offset)
+                            .firstOrNull()?.let {
+                                if (onNavigateImage != null) {
+                                    onNavigateImage(it.item)
                                 }
                             }
-                            is NIP19.Data.Profile -> {
-                                screen = Screen.Timeline(id = data.id)
+                        annotated.getStringAnnotations(tag = "url", start = offset, end = offset)
+                            .firstOrNull()?.let {
+                                uriHandler.openUri(it.item)
+                                tapped = true
                             }
-                            else -> {}
-                        }
-                        if (screen != null && onAddScreen != null) {
-                            onAddScreen(screen)
-                        }
-                    }
-            }, style = TextStyle(color = contentColorFor(MaterialTheme.colorScheme.background)))
+                        annotated.getStringAnnotations(tag = "nevent", start = offset, end = offset)
+                            .firstOrNull()?.let {
+                                val data = NIP19.parse(it.item.substring(6))
+                                var screen: Screen? = null
+                                when (data) {
+                                    is NIP19.Data.Note -> {
+                                        screen =
+                                            Screen.EventDetail(
+                                                data.id,
+                                                pubkey = pubkeyMap[data.id]!!
+                                            )
+                                    }
+
+                                    is NIP19.Data.Event -> {
+                                        when (data.kind) {
+                                            Kind.Text.num -> {
+                                                screen = Screen.EventDetail(
+                                                    data.id,
+                                                    pubkey = pubkeyMap[data.id]!!
+                                                )
+                                            }
+
+                                            Kind.ChannelCreation.num -> {
+                                                if (data.author != null) {
+                                                    screen = Screen.Channel(
+                                                        id = data.id,
+                                                        pubkey = data.author
+                                                    )
+                                                }
+                                            }
+
+                                            Kind.ChannelMessage.num -> {
+                                                screen = Screen.ChannelEventDetail(
+                                                    id = data.id, pubkey = pubkeyMap[data.id]!!,
+                                                    channelID = channelMap[data.id]!!
+                                                )
+                                            }
+
+                                            else -> {}
+                                        }
+                                    }
+
+                                    is NIP19.Data.Profile -> {
+                                        screen = Screen.Timeline(id = data.id)
+                                    }
+
+                                    else -> {}
+                                }
+                                if (screen != null && onAddScreen != null) {
+                                    onAddScreen(screen)
+                                }
+                            }
+                    }, style = TextStyle(color = MaterialTheme.colorScheme.onSurface))
+            }
         }
         if (onNavigate != null || onAddScreen != null) {
             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -949,18 +1178,35 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                     DropdownMenuItem(onClick = {
                         expanded = false
                         onNavigate(event)
-                    }) {
+                    }, text= {
                         Text(stringResource(id = R.string.reply))
-                    }
+                    })
                 }
                 if (onAddScreen != null) {
                     DropdownMenuItem(onClick = {
                         expanded = false
                         onAddScreen(Screen.Timeline(id = event.pubkey))
-                    }) {
+                    }, text = {
                         Text(stringResource(id = R.string.view_profile))
-                    }
+                    })
+                    DropdownMenuItem(onClick = {
+                        onAddScreen(Screen.EventDetail(id = event.id, pubkey = event.pubkey))
+                    }, text = {
+                        Text(stringResource(id = R.string.detail))
+                    })
                 }
+                DropdownMenuItem(onClick = {
+                    val prefix = "nostr:"
+                    val nip19 = NIP19.toString(event)
+                    if (nip19.isNotEmpty()) {
+                        clipboard.setText(annotatedString = AnnotatedString(prefix + NIP19.toString(event)))
+                        coroutineScope.launch {
+                            Toast.makeText(context, context.getString(R.string.copied_nevent, prefix + nip19), Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }, text = {
+                    Text(stringResource(id = R.string.copy_nevent))
+                })
             }
         }
     }
@@ -1386,6 +1632,7 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigate: () -> Unit) {
+    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val privateKey by viewModel.privateKeyFlow.collectAsState()
     val publicKey by viewModel.publicKeyFlow.collectAsState()
@@ -1394,7 +1641,9 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
     val filter = when (screen) {
         is Screen.OwnTimeline -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id)) }
         is Screen.Timeline -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id)) }
-        is Screen.Channel -> { Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(screen.pubKey), tags = mapOf("e" to listOf(screen.id))) }
+        is Screen.Channel -> { Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(screen.pubkey), tags = mapOf("e" to listOf(screen.id))) }
+        is Screen.EventDetail -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.pubkey)) }
+        is Screen.ChannelEventDetail -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.pubkey)) }
     }
     val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
     Column {
@@ -1433,6 +1682,16 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                             Text(stringResource(id = R.string.post_to_channel, m.data.name))
                         }
                     }
+                    is Screen.EventDetail -> {
+                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                            Text(stringResource(id = R.string.post_to_other, m.data.name))
+                        }
+                    }
+                    is Screen.ChannelEventDetail -> {
+                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                            Text(stringResource(id = R.string.post_to_other, m.data.name))
+                        }
+                    }
                 }
                 HorizontalDivider()
                 Text(text = text, modifier = Modifier.fillMaxWidth())
@@ -1452,42 +1711,53 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                 val priv = NIP19.parse(privateKey)
                 val pub = NIP19.parse(publicKey)
                 if (text.isNotEmpty() && priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
-                    val ev = when (screen) {
+                    val kind = when (screen) {
                         is Screen.OwnTimeline -> {
-                            val tags = mutableListOf<List<String>>()
-                            if (event != null) {
-                                for (tag in event.tags) {
-                                    if (tag.size >= 2 && tag[0] == "p") {
-                                        tags.add(tag)
-                                    }
-                                }
-                                if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
-                                    tags.add(listOf("p", event.pubkey))
-                                }
-                            }
-                            val e = Event(kind = Kind.Text.num, content = text, tags = tags,
-                                createdAt = System.currentTimeMillis() / 1000, pubkey = pub.id)
-                            e.id = Event.generateHash(e, false)
-                            e.sig = Event.sign(e, priv.id)
-                            e
+                            Kind.Text
                         }
                         is Screen.Timeline -> {
-                            val tags = mutableListOf<List<String>>()
-                            if (event != null) {
-                                for (tag in event.tags) {
-                                    if (tag.size >= 2 && tag[0] == "p") {
-                                        tags.add(tag)
-                                    }
-                                }
-                                if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
-                                    tags.add(listOf("p", event.pubkey))
+                            Kind.Text
+                        }
+                        is Screen.Channel -> {
+                            Kind.ChannelMessage
+                        }
+                        is Screen.EventDetail -> {
+                            Kind.Text
+                        }
+                        is Screen.ChannelEventDetail -> {
+                            Kind.ChannelMessage
+                        }
+                    }
+                    val generate = { e: Event? ->
+                        val tags = mutableListOf<List<String>>()
+                        if (e != null) {
+                            for (tag in e.tags) {
+                                if (tag.size >= 2 && (tag[0] == "p" || tag[0] == "e")) {
+                                    tags.add(tag)
                                 }
                             }
-                            val e = Event(kind = Kind.Text.num, content = text,
-                                createdAt = System.currentTimeMillis() / 1000, pubkey = pub.id, tags = listOf(listOf("p", screen.id)))
-                            e.id = Event.generateHash(e, false)
-                            e.sig = Event.sign(e, priv.id)
-                            e
+                            if (tags.none { it[0] == "e" }) {
+                                tags.add(listOf("e", e.id, "", "root"))
+                            }
+                            else {
+                                tags.add(listOf("e", e.id, "", "reply"))
+                            }
+                            if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == e.pubkey }) {
+                                tags.add(listOf("p", e.pubkey))
+                            }
+                        }
+                        tags
+                    }
+                    val t = when (screen) {
+                        is Screen.OwnTimeline -> {
+                            generate(event)
+                        }
+                        is Screen.Timeline -> {
+                            val tags = generate(event)
+                            if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == screen.id}) {
+                                tags.add(listOf("p", screen.id))
+                            }
+                            tags
                         }
                         is Screen.Channel -> {
                             val m = metaData
@@ -1508,17 +1778,38 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                                 tags.add(listOf("e", event.id, recommendRelay ?: "", "reply"))
                             }
                             tags.add(listOf("e", screen.id, recommendRelay ?: "", "root"))
-                            val e = Event(kind = Kind.ChannelMessage.num, content = text,
-                                createdAt = System.currentTimeMillis() / 1000, pubkey = pub.id, tags = tags)
-                            e.id = Event.generateHash(e, false)
-                            e.sig = Event.sign(e, priv.id)
-                            e
+                            tags
+                        }
+                        is Screen.EventDetail -> {
+                            val tags = generate(event)
+                            if (screen.pubkey != pub.id && (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == screen.pubkey})) {
+                                tags.add(listOf("p", screen.pubkey))
+                            }
+                            tags
+                        }
+                        is Screen.ChannelEventDetail -> {
+                            val tags = mutableListOf<List<String>>()
+                            if (event != null) {
+                                for (tag in event.tags) {
+                                    if (tag.size >= 2 && tag[0] == "p") {
+                                        tags.add(tag)
+                                    }
+                                }
+                                if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
+                                    tags.add(listOf("p", event.pubkey))
+                                }
+                                // TODO reply? root?
+                                tags.add(listOf("e", event.id, "", "reply"))
+                            }
+                            // TODO recommended relay
+                            tags.add(listOf("e", screen.channelID, "", "reply"))
+                            tags
                         }
                     }
-                    viewModel.post(ev, onSuccess = {
-                        // TODO
-                    }, onFailure = { url, reason ->
-                        Toast.makeText(context, context.getString(R.string.error_failed_to_post), Toast.LENGTH_SHORT).show()
+                    Misc.post(viewModel, kind, text, t, priv, pub, onSuccess = {}, onFailure = { url, reason ->
+                        coroutineScope.launch {
+                            Toast.makeText(context, context.getString(R.string.error_failed_to_post, reason), Toast.LENGTH_SHORT).show()
+                        }
                     })
                     onNavigate()
                 }
@@ -1718,26 +2009,16 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                             json.put("about", about)
                             json.put("picture", picture)
                             json.put("nip05", nip05)
-                            val metaDataEvent = Event(
-                                kind = Kind.Metadata.num,
-                                content = json.toString(),
-                                createdAt = System.currentTimeMillis() / 1000,
-                                pubkey = pub.id
-                            )
-                            metaDataEvent.id = Event.generateHash(metaDataEvent, false)
-                            metaDataEvent.sig = Event.sign(metaDataEvent, priv.id)
-                            viewModel.post(
-                                metaDataEvent,
-                                onSuccess = {},
-                                onFailure = { url, reason ->
+                            Misc.post(viewModel, kind = Kind.Metadata, content = json.toString(), tags = listOf(),
+                                priv, pub, onSuccess = {}, onFailure = { url, reason ->
                                     coroutineScope.launch(Dispatchers.Main) {
                                         Toast.makeText(
                                             context,
-                                            context.getString(R.string.error_failed_to_post),
+                                            context.getString(R.string.error_failed_to_post, reason),
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
-                                })
+                            })
                             Misc.postContacts(viewModel, followeeList, priv, pub, onSuccess = {},
                                 onFailure = { url, reason ->
                                     coroutineScope.launch(Dispatchers.Main) {

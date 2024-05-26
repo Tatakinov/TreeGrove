@@ -66,4 +66,7 @@
     <string name="error_invalid_image">無効な画像ファイルです</string>
     <string name="not_loading">未ローディング</string>
     <string name="error_invalid_data">無効なデータ: %s</string>
+    <string name="detail">詳細</string>
+    <string name="copy_nevent">イベントをコピー</string>
+    <string name="copied_nevent">イベントをコピーしました: %s</string>
 </resources>
