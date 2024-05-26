@@ -794,7 +794,6 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
         if (pos == -1) {
             break
         }
-        Log.d("debug", event.content.substring(pos))
         val npubMatch = "^nostr:npub1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
         val noteMatch = "^nostr:note1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
         val neventMatch = "^nostr:nevent1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+".toRegex().find(event.content.substring(pos))
@@ -807,8 +806,11 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                         authors = listOf(pub.id)
                     )
                 ).collectAsState()
+                i = pos + npubMatch.value.length
             }
-            i = pos + npubMatch.value.length
+            else {
+                i = pos + 1
+            }
         }
         else if (noteMatch != null) {
             val e = NIP19.parse(noteMatch.value.substring(6))
@@ -820,9 +822,25 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                     if (ev.kind == Kind.Text.num) {
                         pubkeyMap[e.id] = ev.pubkey
                     }
+                    else if (ev.kind == Kind.ChannelMessage.num) {
+                        val eTagList = ev.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                        if (eTagList.isNotEmpty()) {
+                            val channelFilter =
+                                Filter(ids = eTagList, kinds = listOf(Kind.ChannelCreation.num))
+                            val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
+                                .collectAsState()
+                            if (channelEvent.isNotEmpty()) {
+                                pubkeyMap[e.id] = ev.pubkey
+                                channelMap[e.id] = channelEvent.first().id
+                            }
+                        }
+                    }
                 }
+                i = pos + noteMatch.value.length
             }
-            i = pos + noteMatch.value.length
+            else {
+                i = pos + 1
+            }
         }
         else if (neventMatch != null) {
             val e = NIP19.parse(neventMatch.value.substring(6))
@@ -861,8 +879,11 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                         pubkeyMap[e.id] = ev.pubkey
                     }
                 }
+                i = pos + neventMatch.value.length
             }
-            i = pos + neventMatch.value.length
+            else {
+                i = pos + 1
+            }
         }
         else {
             i = pos + 1
@@ -986,8 +1007,8 @@ fun Event1(viewModel: TreeGroveViewModel, event: Event,  onNavigate: ((Event) ->
                         }
                     }
                     if (!isReplaced) {
-                        append(content[index])
-                        index++
+                        append(content[min])
+                        index = min + 1
                     }
                 }
                 else {
