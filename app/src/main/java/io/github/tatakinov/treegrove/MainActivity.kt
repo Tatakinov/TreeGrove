@@ -752,23 +752,61 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
         val parentIDList = event.tags.filter {
             it.size >= 2 && it[0] == "e"
         }.map { it[1] }.distinctBy { it }
-        val parentFilter = Filter(ids = parentIDList)
-        val parentEventList by viewModel.subscribeOneShotEvent(parentFilter).collectAsState()
-        val childFilter = Filter(kinds = listOf(event.kind), tags = mapOf("e" to listOf(event.id)))
-        val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
-        LazyColumn(state = listState) {
-            items(items = parentEventList.filter { it.kind == Kind.Text.num || it.kind == Kind.ChannelMessage.num }.sortedBy {it.createdAt },
-                key = { it.toJSONObject().toString() }) {
-                Event1(viewModel, it, onNavigate, onAddScreen = onAddScreen, onNavigateImage)
+        if (parentIDList.isNotEmpty()) {
+            val parentFilter =
+                Filter(ids = parentIDList, kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num))
+            val parentEventList by viewModel.subscribeOneShotEvent(parentFilter).collectAsState()
+            val childFilter = Filter(
+                kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num),
+                tags = mapOf("e" to listOf(event.id))
+            )
+            val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
+            LazyColumn(state = listState) {
+                items(items = parentEventList.sortedBy { it.createdAt },
+                    key = { it.toJSONObject().toString() }) {
+                    Event1(viewModel, it, onNavigate, onAddScreen = onAddScreen, onNavigateImage)
+                }
+                item {
+                    Event1(
+                        viewModel,
+                        event,
+                        onNavigate,
+                        onAddScreen,
+                        onNavigateImage,
+                        isFocused = true
+                    )
+                }
+                val el = childEventList
+                items(
+                    items = el.sortedBy { it.createdAt },
+                    key = { it.toJSONObject().toString() }) {
+                    Event1(viewModel, it, onNavigate, onAddScreen, onNavigateImage)
+                }
             }
-            item {
-                Event1(viewModel, event, onNavigate, onAddScreen, onNavigateImage, isFocused = true)
-            }
-            val el = childEventList
-            items(items = el.filter {
-                it.kind == Kind.Text.num || it.kind == Kind.ChannelMessage.num
-            }.sortedBy { it.createdAt }, key = { it.toJSONObject().toString() }) {
-                Event1(viewModel, it, onNavigate, onAddScreen, onNavigateImage)
+        }
+        else {
+            val childFilter = Filter(
+                kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num),
+                tags = mapOf("e" to listOf(event.id))
+            )
+            val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
+            LazyColumn(state = listState) {
+                item {
+                    Event1(
+                        viewModel,
+                        event,
+                        onNavigate,
+                        onAddScreen,
+                        onNavigateImage,
+                        isFocused = true
+                    )
+                }
+                val el = childEventList
+                items(
+                    items = el.sortedBy { it.createdAt },
+                    key = { it.toJSONObject().toString() }) {
+                    Event1(viewModel, it, onNavigate, onAddScreen, onNavigateImage)
+                }
             }
         }
     }
@@ -1784,7 +1822,9 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                                 }
                                 tags.add(listOf("e", event.id, recommendRelay ?: "", "reply"))
                             }
-                            tags.add(listOf("e", screen.id, recommendRelay ?: "", "root"))
+                            else {
+                                tags.add(listOf("e", screen.id, recommendRelay ?: "", "root"))
+                            }
                             tags
                         }
                         is Screen.EventDetail -> {
@@ -1808,8 +1848,10 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                                 // TODO reply? root?
                                 tags.add(listOf("e", event.id, "", "reply"))
                             }
-                            // TODO recommended relay
-                            tags.add(listOf("e", screen.channelID, "", "reply"))
+                            else {
+                                // TODO recommended relay
+                                tags.add(listOf("e", screen.channelID, "", "root"))
+                            }
                             tags
                         }
                     }
