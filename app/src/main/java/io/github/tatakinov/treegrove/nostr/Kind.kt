@@ -10,6 +10,7 @@ enum class Kind(val num : Int) {
     Repost(6),
     Reaction(7),
     BadgeAward(8),
+    GenericRepost(16),
     ChannelCreation(40),
     ChannelMetadata(41),
     ChannelMessage(42),

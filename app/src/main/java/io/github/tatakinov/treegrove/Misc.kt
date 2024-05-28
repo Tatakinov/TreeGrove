@@ -30,6 +30,32 @@ object Misc {
         viewModel.post(e, onSuccess = onSuccess, onFailure = onFailure)
     }
 
+    fun repost(viewModel: TreeGroveViewModel, event: Event, priv: NIP19.Data.Sec, pub: NIP19.Data.Pub,
+               onSuccess: () -> Unit, onFailure: (String, String) -> Unit) {
+        val urlList = viewModel.getURL(event)
+        if (urlList.isNotEmpty()) {
+            val url = urlList.first()
+            val kind = if (event.kind == Kind.Text.num) {
+                Kind.Repost.num
+            }
+            else {
+                Kind.GenericRepost.num
+            }
+            val tags = mutableListOf(listOf("e", event.id, url))
+            if (event.kind != Kind.Text.num) {
+                tags.add(listOf("k", event.kind.toString()))
+            }
+            val e = Event(kind = kind, content = event.toJSONObject().toString(), tags = tags,
+                createdAt = now(), pubkey = pub.id)
+            e.id = Event.generateHash(e, false)
+            e.sig = Event.sign(e, priv.id)
+            viewModel.post(e, onSuccess = onSuccess, onFailure = onFailure)
+        }
+        else {
+            TODO("logic error?")
+        }
+    }
+
     fun now() : Long {
         return System.currentTimeMillis() / 1000
     }

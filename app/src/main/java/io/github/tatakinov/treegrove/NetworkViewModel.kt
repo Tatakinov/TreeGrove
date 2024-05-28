@@ -423,7 +423,7 @@ class NetworkViewModel : ViewModel() {
                             if (!_channelListInternal.contains(event.id)) {
                                 _channelListInternal[event.id] = mutableListOf()
                             }
-                            _channelListInternal[event.id]!!.add(EventInfo(from = listOf(relay.url), event = event))
+                            _channelListInternal[event.id]!!.add(EventInfo(from = listOf(relay.url), event = event, false))
                         }
                     }
                     // エラーは出さず受信したイベントを無視する
@@ -492,7 +492,7 @@ class NetworkViewModel : ViewModel() {
                         if (!map.contains(event.id)) {
                             map[event.id] = mutableListOf()
                         }
-                        map[event.id]!!.add(EventInfo(from = listOf(relay.url), event = event))
+                        map[event.id]!!.add(EventInfo(from = listOf(relay.url), event = event, false))
                     }
                 }
             }

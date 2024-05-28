@@ -79,6 +79,9 @@
     <string name="detail">detail</string>
     <string name="copy_nevent">copy nevent</string>
     <string name="copied_nevent">copied nevent: %s</string>
+    <string name="repost_by" translatable="false">Repost by %s</string>
+    <string name="repost">repost</string>
+    <string name="confirm_repost">do repost?</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

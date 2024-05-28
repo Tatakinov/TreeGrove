@@ -13,6 +13,7 @@ import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.NIP05
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import io.github.tatakinov.treegrove.ui.Screen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -39,8 +40,6 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
     private val _dataCache = mutableMapOf<String, MutableStateFlow<LoadingData<ByteArray>>>()
     private val _eventHashCache = hashSetOf<Event>()
     private val _eventCache = mutableListOf<EventInfo>()
-    private val _oneShotEventHashCache = hashSetOf<Event>()
-    private val _oneShotEventCache = mutableListOf<EventInfo>()
     private val _streamEventMap = mutableMapOf<Filter, MutableStateFlow<List<Event>>>()
     private val _replaceableEventMap = mutableMapOf<Filter, MutableStateFlow<LoadingData<ReplaceableEvent>>>()
     private val _oneShotEventMap = mutableMapOf<Filter, MutableStateFlow<List<Event>>>()
@@ -71,40 +70,42 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         }
     }
 
-    private suspend fun addEventCache(cacheSet: MutableSet<Event>, cache: MutableList<EventInfo>, url: String, event: Event) {
-        if (!cacheSet.contains(event)) {
-            cacheSet.add(event)
-            cache.add(EventInfo(listOf(url), event))
+    private suspend fun addEventCache(url: String, event: Event, isOneShot: Boolean) {
+        if (!_eventHashCache.contains(event)) {
+            _eventHashCache.add(event)
+            _eventCache.add(EventInfo(listOf(url), event, isOneShot))
         }
         else {
-            for (i in cache.indices) {
-                if (cache[i].event == event && !cache[i].from.contains(url)) {
+            for (i in _eventCache.indices) {
+                if (_eventCache[i].event == event && !_eventCache[i].from.contains(url)) {
                     val list = mutableListOf<String>().apply {
-                        addAll(cache[i].from)
+                        addAll(_eventCache[i].from)
                         add(url)
                     }
-                    cache[i] = cache[i].copy(from = list)
+                    _eventCache[i] = _eventCache[i].copy(from = list, isOneShot = _eventCache[i].isOneShot && isOneShot)
                     break
                 }
             }
         }
         if (event.kind == Kind.ChannelCreation.num) {
             val e = Event(kind = Kind.ChannelMetadata.num, content = event.content, createdAt = event.createdAt, pubkey = event.pubkey, tags = listOf(listOf("e", event.id)),)
-            addEventCache(cacheSet, cache, url, e)
+            addEventCache(url, e, isOneShot)
         }
     }
 
     private suspend fun updateEventCache() {
         val streamKeySet = mutableSetOf<Filter>()
         val replaceableKeySet = mutableSetOf<Filter>()
+        val oneShotKeySet = mutableSetOf<Filter>()
         _mutexFlow.withLock {
             streamKeySet.addAll(_streamEventMap.keys)
             replaceableKeySet.addAll(_replaceableEventMap.keys)
+            oneShotKeySet.addAll(_oneShotEventMap.keys)
         }
         for (k in streamKeySet) {
             val v = _streamEventMap[k]
             v?.let { flow ->
-                val l = _eventCache.filter { k.cond(it.event) }.map { it.event }
+                val l = _eventCache.filter { k.cond(it.event) && !it.isOneShot }.map { it.event }
                 if (flow.value.size < l.size) {
                     flow.update { l }
                 }
@@ -113,7 +114,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         for (k in replaceableKeySet) {
             val v = _replaceableEventMap[k]
             v?.let { flow ->
-                val e = _eventCache.filter { k.cond(it.event) }.map { it.event }.firstOrNull()
+                val e = _eventCache.filter { k.cond(it.event) && !it.isOneShot }.map { it.event }.firstOrNull()
                 val r = e?.let {
                     ReplaceableEvent.parse(it)
                 }
@@ -127,6 +128,15 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                     } else if (value.data.createdAt < r.createdAt) {
                         flow.update { LoadingData.Valid(r) }
                     }
+                }
+            }
+        }
+        for (k in oneShotKeySet) {
+            val v = _oneShotEventMap[k]
+            v?.let { flow ->
+                val l = _eventCache.filter { k.cond(it.event) }.map { it.event }
+                if (l.size > flow.value.size) {
+                    flow.update { l }
                 }
             }
         }
@@ -167,7 +177,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                             override fun onEvent(relay: Relay, event: Event) {
                                 viewModelScope.launch {
                                     _mutexCache.withLock {
-                                        addEventCache(_eventHashCache, _eventCache, relay.url(), event)
+                                        addEventCache(relay.url(), event, false)
                                         _eventCache.sortByDescending { it.event.createdAt }
                                     }
                                     updateEventCache()
@@ -300,7 +310,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             _mutexRelay.withLock {
                 for (relay in _relayList) {
                     val list =
-                        _eventCache.filter { filter.cond(it.event) && it.from.contains(relay.url()) }
+                        _eventCache.filter { filter.cond(it.event) && it.from.contains(relay.url()) && !it.isOneShot }
                             .map { it.event }
                     val until = if (list.isNotEmpty()) {
                         val last = list.last()
@@ -313,7 +323,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                             viewModelScope.launch {
                                 _mutexCache.withLock {
                                     for (event in eventList) {
-                                        addEventCache(_eventHashCache, _eventCache, url, event)
+                                        addEventCache(url, event, false)
                                     }
                                     _eventCache.sortByDescending { it.event.createdAt }
                                 }
@@ -432,7 +442,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                     viewModelScope.launch {
                         _mutexCache.withLock {
                             for (event in eventList) {
-                                addEventCache(_eventHashCache, _eventCache, url, event)
+                                addEventCache(url, event, false)
                             }
                             _eventCache.sortByDescending { it.event.createdAt }
                         }
@@ -456,16 +466,11 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                         viewModelScope.launch {
                             _mutexCache.withLock {
                                 for (event in eventList) {
-                                    addEventCache(_oneShotEventHashCache, _oneShotEventCache, url, event)
+                                    addEventCache(url, event, true)
                                 }
-                                _oneShotEventCache.sortByDescending { it.event.createdAt }
+                                _eventCache.sortByDescending { it.event.createdAt }
                             }
-                            for ((k, v) in _oneShotEventMap) {
-                                val l = _oneShotEventCache.filter { k.cond(it.event) }.map { it.event }
-                                if (l.size > v.value.size) {
-                                    v.update { l }
-                                }
-                            }
+                            updateEventCache()
                         }
                     })
                 }
@@ -512,5 +517,63 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             }
         }
         return _dataCache[url]!!
+    }
+
+    fun getURL(event: Event): List<String> {
+        val createdAt = event.createdAt
+        var startIndexMin = 0
+        var startIndexMax = _eventCache.lastIndex
+        var startIndex: Int;
+        while (true) {
+            startIndex = (startIndexMin + startIndexMax) / 2
+            if (startIndex == startIndexMin || startIndex == startIndexMax) {
+                break
+            }
+            if (_eventCache[startIndex].event.createdAt == createdAt) {
+                if (_eventCache[startIndex - 1].event.createdAt > createdAt) {
+                    break
+                }
+                else {
+                    startIndexMax = startIndex
+                }
+            }
+            else if (_eventCache[startIndex].event.createdAt > createdAt) {
+                startIndexMin = startIndex
+            }
+            else {
+                startIndexMax = startIndex
+            }
+        }
+        if (_eventCache[startIndex].event.createdAt != createdAt) {
+            return listOf()
+        }
+        var endIndexMin = 0
+        var endIndexMax = _eventCache.lastIndex
+        var endIndex: Int;
+        while (true) {
+            endIndex = (endIndexMin + endIndexMax) / 2
+            if (endIndex == endIndexMin || endIndex == endIndexMax) {
+                break
+            }
+            if (_eventCache[endIndex].event.createdAt == createdAt) {
+                if (_eventCache[endIndex + 1].event.createdAt < createdAt) {
+                    break
+                }
+                else {
+                    endIndexMin = endIndex
+                }
+            }
+            else if (_eventCache[endIndex].event.createdAt > createdAt) {
+                endIndexMin = endIndex
+            }
+            else {
+                endIndexMax = endIndex
+            }
+        }
+        if (_eventCache[endIndex].event.createdAt != createdAt) {
+            return listOf()
+        }
+        val list = _eventCache.slice(IntRange(startIndex, endIndex))
+        return list.filter { it.event == event }.map { it.from }.firstOrNull() ?: listOf()
     }
 }
