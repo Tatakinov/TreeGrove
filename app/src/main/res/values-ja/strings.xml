@@ -71,4 +71,5 @@
     <string name="copied_nevent">イベントをコピーしました: %s</string>
     <string name="repost">リポスト</string>
     <string name="confirm_repost">リポストしますか？</string>
+    <string name="notification">通知</string>
 </resources>

@@ -82,6 +82,7 @@
     <string name="repost_by" translatable="false">Repost by %s</string>
     <string name="repost">repost</string>
     <string name="confirm_repost">do repost?</string>
+    <string name="notification">Notification</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

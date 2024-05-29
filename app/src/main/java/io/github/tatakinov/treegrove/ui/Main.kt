@@ -44,6 +44,9 @@ fun Main(viewModel: TreeGroveViewModel) {
                     is Screen.ChannelEventDetail -> {
                         navController.navigate("post?class=ChannelEventDetail&id=${s.id}&pubkey=${s.pubkey}&channel=${s.channelID}&event=${e}")
                     }
+                    is Screen.Notification -> {
+                        navController.navigate("post?class=Notification&id=${s.id}&event=${e}")
+                    }
                 }
             }, onNavigateProfile = {
                 navController.navigate("profile")
@@ -110,6 +113,9 @@ fun Main(viewModel: TreeGroveViewModel) {
                     else {
                         null
                     }
+                }
+                "Notification" -> {
+                    Screen.Notification(id = id)
                 }
                 else -> { null }
             }

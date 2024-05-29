@@ -233,7 +233,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                             json.put("about", about)
                             json.put("picture", picture)
                             json.put("nip05", nip05)
-                            Misc.post(viewModel, kind = Kind.Metadata, content = json.toString(), tags = listOf(),
+                            Misc.post(viewModel, kind = Kind.Metadata.num, content = json.toString(), tags = listOf(),
                                 priv, pub, onSuccess = {}, onFailure = { url, reason ->
                                     coroutineScope.launch(Dispatchers.Main) {
                                         Toast.makeText(

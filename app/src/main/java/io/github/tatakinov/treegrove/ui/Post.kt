@@ -43,12 +43,18 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
     val publicKey by viewModel.publicKeyFlow.collectAsState()
     var text by remember { mutableStateOf("") }
     var openConfirmDialog by remember { mutableStateOf(false) }
-    val filter = when (screen) {
-        is Screen.OwnTimeline -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id)) }
-        is Screen.Timeline -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id)) }
-        is Screen.Channel -> { Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(screen.pubkey), tags = mapOf("e" to listOf(screen.id))) }
-        is Screen.EventDetail -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.pubkey)) }
-        is Screen.ChannelEventDetail -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.pubkey)) }
+    val filter = if (event != null) {
+        Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(event.pubkey))
+    }
+    else {
+        when (screen) {
+            is Screen.OwnTimeline -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id)) }
+            is Screen.Timeline -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id)) }
+            is Screen.Channel -> { Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(screen.pubkey), tags = mapOf("e" to listOf(screen.id))) }
+            is Screen.EventDetail -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.pubkey)) }
+            is Screen.ChannelEventDetail -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.pubkey)) }
+            is Screen.Notification -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id))}
+        }
     }
     val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
     Column {
@@ -71,30 +77,46 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
         }, text = {
             Column {
                 val m = metaData
-                when (screen) {
-                    is Screen.OwnTimeline -> {
-                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                            Text(stringResource(id = R.string.post_to_own, m.data.name))
-                        }
+                if (event != null) {
+                    if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                        Text(stringResource(id = R.string.post_to_other, m.data.name))
                     }
-                    is Screen.Timeline -> {
-                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                            Text(stringResource(id = R.string.post_to_other, m.data.name))
+                }
+                else {
+                    when (screen) {
+                        is Screen.OwnTimeline -> {
+                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                Text(stringResource(id = R.string.post_to_own, m.data.name))
+                            }
                         }
-                    }
-                    is Screen.Channel -> {
-                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
-                            Text(stringResource(id = R.string.post_to_channel, m.data.name))
+
+                        is Screen.Timeline -> {
+                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                Text(stringResource(id = R.string.post_to_other, m.data.name))
+                            }
                         }
-                    }
-                    is Screen.EventDetail -> {
-                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                            Text(stringResource(id = R.string.post_to_other, m.data.name))
+
+                        is Screen.Channel -> {
+                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
+                                Text(stringResource(id = R.string.post_to_channel, m.data.name))
+                            }
                         }
-                    }
-                    is Screen.ChannelEventDetail -> {
-                        if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
-                            Text(stringResource(id = R.string.post_to_other, m.data.name))
+
+                        is Screen.EventDetail -> {
+                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                Text(stringResource(id = R.string.post_to_other, m.data.name))
+                            }
+                        }
+
+                        is Screen.ChannelEventDetail -> {
+                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                Text(stringResource(id = R.string.post_to_other, m.data.name))
+                            }
+                        }
+                        is Screen.Notification -> {
+                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
+                                Text(stringResource(id = R.string.post_to_own, m.data.name))
+                            }
                         }
                     }
                 }
@@ -116,105 +138,77 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                 val priv = NIP19.parse(privateKey)
                 val pub = NIP19.parse(publicKey)
                 if (text.isNotEmpty() && priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
-                    val kind = when (screen) {
-                        is Screen.OwnTimeline -> {
-                            Kind.Text
-                        }
-                        is Screen.Timeline -> {
-                            Kind.Text
-                        }
-                        is Screen.Channel -> {
-                            Kind.ChannelMessage
-                        }
-                        is Screen.EventDetail -> {
-                            Kind.Text
-                        }
-                        is Screen.ChannelEventDetail -> {
-                            Kind.ChannelMessage
-                        }
-                    }
-                    val generate = { e: Event? ->
-                        val tags = mutableListOf<List<String>>()
-                        if (e != null) {
-                            for (tag in e.tags) {
-                                if (tag.size >= 2 && (tag[0] == "p" || tag[0] == "e")) {
-                                    tags.add(tag)
-                                }
+                    val kind = event?.kind
+                        ?: when (screen) {
+                            is Screen.OwnTimeline -> {
+                                Kind.Text.num
                             }
+
+                            is Screen.Timeline -> {
+                                Kind.Text.num
+                            }
+
+                            is Screen.Channel -> {
+                                Kind.ChannelMessage.num
+                            }
+
+                            is Screen.EventDetail -> {
+                                Kind.Text.num
+                            }
+
+                            is Screen.ChannelEventDetail -> {
+                                Kind.ChannelMessage.num
+                            }
+
+                            is Screen.Notification -> {
+                                Kind.Text.num
+                            }
+                        }
+                    val t =
+                        if (event != null) {
+                            val tags = mutableListOf<List<String>>()
+                            tags.addAll(event.tags.filter { it.size >= 2 && (it[0] == "e" || it[0] == "p") })
                             if (tags.none { it[0] == "e" }) {
-                                tags.add(listOf("e", e.id, "", "root"))
+                                tags.add(listOf("e", event.id, "", "root"))
                             }
                             else {
-                                tags.add(listOf("e", e.id, "", "reply"))
-                            }
-                            if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == e.pubkey }) {
-                                tags.add(listOf("p", e.pubkey))
-                            }
-                        }
-                        tags
-                    }
-                    val t = when (screen) {
-                        is Screen.OwnTimeline -> {
-                            generate(event)
-                        }
-                        is Screen.Timeline -> {
-                            val tags = generate(event)
-                            if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == screen.id}) {
-                                tags.add(listOf("p", screen.id))
-                            }
-                            tags
-                        }
-                        is Screen.Channel -> {
-                            val m = metaData
-                            var recommendRelay: String? = null
-                            if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
-                                recommendRelay = m.data.recommendRelay
-                            }
-                            val tags = mutableListOf<List<String>>()
-                            if (event != null) {
-                                for (tag in event.tags) {
-                                    if (tag.size >= 2 && (tag[0] == "p" || tag[0] == "e")) {
-                                        tags.add(tag)
-                                    }
-                                }
-                                if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
-                                    tags.add(listOf("p", event.pubkey))
-                                }
-                                tags.add(listOf("e", event.id, recommendRelay ?: "", "reply"))
-                            }
-                            else {
-                                tags.add(listOf("e", screen.id, recommendRelay ?: "", "root"))
-                            }
-                            tags
-                        }
-                        is Screen.EventDetail -> {
-                            val tags = generate(event)
-                            if (screen.pubkey != pub.id && (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == screen.pubkey})) {
-                                tags.add(listOf("p", screen.pubkey))
-                            }
-                            tags
-                        }
-                        is Screen.ChannelEventDetail -> {
-                            val tags = mutableListOf<List<String>>()
-                            if (event != null) {
-                                for (tag in event.tags) {
-                                    if (tag.size >= 2 && (tag[0] == "p" || tag[0] == "e")) {
-                                        tags.add(tag)
-                                    }
-                                }
-                                if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
-                                    tags.add(listOf("p", event.pubkey))
-                                }
-                                // TODO reply? root?
                                 tags.add(listOf("e", event.id, "", "reply"))
                             }
-                            else {
-                                // TODO recommended relay
-                                tags.add(listOf("e", screen.channelID, "", "root"))
+                            if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
+                                tags.add(listOf("p", event.pubkey))
                             }
                             tags
                         }
-                    }
+                        else {
+                            when (screen) {
+                                is Screen.OwnTimeline -> {
+                                    listOf()
+                                }
+                                is Screen.Timeline -> {
+                                    listOf(listOf("p", screen.id))
+                                }
+                                is Screen.Channel -> {
+                                    val m = metaData
+                                    var recommendRelay: String? = null
+                                    if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
+                                        recommendRelay = m.data.recommendRelay
+                                    }
+                                    val tags = mutableListOf<List<String>>()
+                                    tags.add(listOf("e", screen.id, recommendRelay ?: "", "root"))
+                                    tags
+                                }
+                                is Screen.EventDetail -> {
+                                    listOf(listOf("p", screen.pubkey))
+                                }
+                                is Screen.ChannelEventDetail -> {
+                                    // TODO recommended relay
+                                    listOf(listOf("e", screen.channelID, "", "root"))
+                                }
+                                is Screen.Notification -> {
+                                    listOf()
+                                }
+                            }
+                        }
                     Misc.post(viewModel, kind, text, t, priv, pub, onSuccess = {}, onFailure = { url, reason ->
                         coroutineScope.launch {
                             Toast.makeText(context, context.getString(R.string.error_failed_to_post, reason), Toast.LENGTH_SHORT).show()

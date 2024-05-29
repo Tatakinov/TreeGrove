@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -216,7 +217,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             })
                     }
                 }
-                if (publicKey.isNotEmpty()) {
+                if (pub is NIP19.Data.Pub) {
                     item {
                         HorizontalDivider()
                     }
@@ -227,14 +228,40 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             selected = false,
                             onClick = {
                                 if (tabList.isEmpty() || tabList.none { it is Screen.OwnTimeline }) {
-                                    val pub = NIP19.parse(publicKey)
-                                    if (pub is NIP19.Data.Pub) {
-                                        tabList.add(Screen.OwnTimeline(pub.id))
-                                    }
+                                    tabList.add(Screen.OwnTimeline(pub.id))
                                 }
                                 var index = -1
                                 for (i in tabList.indices) {
                                     if (tabList[i] is Screen.OwnTimeline) {
+                                        index = i
+                                        break
+                                    }
+                                }
+                                coroutineScope.launch {
+                                    drawerState.close()
+                                }
+                                if (index >= 0) {
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(index)
+                                    }
+                                }
+                            })
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.Filled.Notifications, "notification") },
+                            label = { Text(stringResource(id = R.string.notification)) },
+                            selected = false,
+                            onClick = {
+                                if (tabList.isEmpty() || tabList.none { it is Screen.Notification }) {
+                                    tabList.add(Screen.Notification(pub.id))
+                                }
+                                var index = -1
+                                for (i in tabList.indices) {
+                                    if (tabList[i] is Screen.Notification) {
                                         index = i
                                         break
                                     }
@@ -418,6 +445,11 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                 onNavigateImage = onNavigateImage
                             )
                         }
+                        is Screen.Notification -> {
+                            Notification(viewModel = viewModel, onNavigate = {
+                                onNavigatePost(screen, it)
+                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                        }
                     }
                 }
             }
@@ -435,13 +467,24 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
             for (i in tabList.indices) {
                 if (tabList[i] is Screen.OwnTimeline) {
                     tabList[i] = Screen.OwnTimeline(pub.id)
-                    break
+                }
+                else if (tabList[i] is Screen.Notification) {
+                    tabList[i] = Screen.Notification(pub.id)
                 }
             }
         }
         else {
             for (i in tabList.indices) {
                 if (tabList[i] is Screen.OwnTimeline) {
+                    tabList.removeAt(i)
+                    if (pagerState.currentPage >= i) {
+                        pagerState.scrollToPage(pagerState.currentPage - 1)
+                    }
+                    break
+                }
+            }
+            for (i in tabList.indices) {
+                if (tabList[i] is Screen.Notification) {
                     tabList.removeAt(i)
                     if (pagerState.currentPage >= i) {
                         pagerState.scrollToPage(pagerState.currentPage - 1)
