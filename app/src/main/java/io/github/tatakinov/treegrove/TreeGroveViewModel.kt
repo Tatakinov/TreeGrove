@@ -1,5 +1,6 @@
 package io.github.tatakinov.treegrove
 
+import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -28,8 +29,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.Response
 import org.json.JSONException
 import org.json.JSONObject
-
-data class StreamFilter(val id: String, val filter: Filter)
+import java.lang.ref.WeakReference
 
 class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesRepository): ViewModel() {
     private val _mutexRelay = Mutex()
@@ -40,10 +40,9 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
     private val _dataCache = mutableMapOf<String, MutableStateFlow<LoadingData<ByteArray>>>()
     private val _eventHashCache = hashSetOf<Event>()
     private val _eventCache = mutableListOf<EventInfo>()
-    private val _streamEventMap = mutableMapOf<Filter, MutableStateFlow<List<Event>>>()
+    private val _streamEventMap = hashMapOf<Filter, Pair<Int, MutableStateFlow<List<Event>>>>()
     private val _replaceableEventMap = mutableMapOf<Filter, MutableStateFlow<LoadingData<ReplaceableEvent>>>()
     private val _oneShotEventMap = mutableMapOf<Filter, MutableStateFlow<List<Event>>>()
-    private val _streamFilterSet = mutableSetOf<StreamFilter>()
     private var fetchSize: Long = 0
     private var _transmittedSizeFlow = MutableStateFlow(0)
     val transmittedSizeFlow: StateFlow<Int> = _transmittedSizeFlow
@@ -103,18 +102,16 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             oneShotKeySet.addAll(_oneShotEventMap.keys)
         }
         for (k in streamKeySet) {
-            val v = _streamEventMap[k]
-            v?.let { flow ->
-                val l = _eventCache.filter { k.cond(it.event) && !it.isOneShot }.map { it.event }
+            _streamEventMap[k]?.let { (_, flow) ->
+                val l = _eventCache.filter { k.cond(it.event) }.map { it.event }
                 if (flow.value.size < l.size) {
                     flow.update { l }
                 }
             }
         }
         for (k in replaceableKeySet) {
-            val v = _replaceableEventMap[k]
-            v?.let { flow ->
-                val e = _eventCache.filter { k.cond(it.event) && !it.isOneShot }.map { it.event }.firstOrNull()
+            _replaceableEventMap[k]?.let { flow ->
+                val e = _eventCache.filter { k.cond(it.event) }.map { it.event }.firstOrNull()
                 val r = e?.let {
                     ReplaceableEvent.parse(it)
                 }
@@ -123,7 +120,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                     if (value !is LoadingData.Valid) {
                         flow.update { LoadingData.Valid(r) }
                         if (r is ReplaceableEvent.MetaData && r.nip05.domain.isNotEmpty()) {
-                            fetchNIP05(v, r.nip05.domain, e.pubkey)
+                            fetchNIP05(flow, r.nip05.domain, e.pubkey)
                         }
                     } else if (value.data.createdAt < r.createdAt) {
                         flow.update { LoadingData.Valid(r) }
@@ -132,8 +129,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             }
         }
         for (k in oneShotKeySet) {
-            val v = _oneShotEventMap[k]
-            v?.let { flow ->
+            _oneShotEventMap[k]?.let { flow ->
                 val l = _eventCache.filter { k.cond(it.event) }.map { it.event }
                 if (l.size > flow.value.size) {
                     flow.update { l }
@@ -154,7 +150,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                             l.add(RelayInfo(relayConfig.url))
                             l
                         }
-                        val relay = Relay(relayConfig.url, object : OnRelayListener {
+                        val relay = Relay(relayConfig.url, relayConfig.read, relayConfig.write, object : OnRelayListener {
                             override fun onConnected(relay: Relay) {
                                 _relayInfoListFlow.update {
                                     val l = mutableListOf<RelayInfo>().apply {
@@ -167,9 +163,9 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                     }
                                     l
                                 }
-                                if (_streamFilterSet.isNotEmpty()) {
+                                if (_streamEventMap.isNotEmpty()) {
                                     viewModelScope.launch(Dispatchers.IO) {
-                                        relay.sendStream(_streamFilterSet.mapTo(mutableSetOf()) { it.filter.copy(limit = 0) })
+                                        relay.sendStream(_streamEventMap.keys.mapTo(mutableSetOf()) { it.copy(limit = 0) })
                                     }
                                 }
                             }
@@ -221,8 +217,11 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                 TODO("Not yet implemented")
                             }
                         })
-                        relay.change(relayConfig.read, relayConfig.write)
                         _relayList.add(relay)
+                    }
+                    else {
+                        val relay = _relayList.first { it.url() == relayConfig.url }
+                        relay.change(relayConfig.read, relayConfig.write)
                     }
                 }
                 var index = 0
@@ -259,7 +258,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         viewModelScope.launch {
             _mutexRelay.withLock {
                 for (relay in _relayList) {
-                    relay.sendStream(_streamFilterSet.mapTo(mutableSetOf()) { it.filter.copy(limit = 0) })
+                    relay.sendStream(_streamEventMap.filter { (k, v) -> v.first > 0 }.keys.mapTo(mutableSetOf()) { it.copy(limit = 0) })
                 }
             }
         }
@@ -275,33 +274,33 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         }
     }
 
-    fun subscribeStreamEvent(streamFilter: StreamFilter): StateFlow<List<Event>> {
-        var filter: Filter?
-        runBlocking {
+    fun subscribeStreamEvent(filter: Filter): StateFlow<List<Event>> {
+        return runBlocking {
             _mutexFlow.withLock {
-                filter = _streamFilterSet.filter{ it.id == streamFilter.id }.map { it.filter }.firstOrNull()
-                if (filter != null) {
-                    return@runBlocking
+                val v = _streamEventMap[filter]
+                if (v != null) {
+                    _streamEventMap[filter] = v.copy(first = v.first + 1)
                 }
                 else {
-                    filter = streamFilter.filter
+                    _streamEventMap[filter] = Pair(1, MutableStateFlow(listOf()))
                 }
-                if (streamFilter.id != "invalid" && !_streamEventMap.containsKey(streamFilter.filter)) {
-                    _streamFilterSet.add(streamFilter)
-                }
-                _streamEventMap[streamFilter.filter] = MutableStateFlow(listOf())
             }
             sendStream()
+            return@runBlocking _streamEventMap[filter]!!.second
         }
-        return _streamEventMap[filter]!!
     }
 
-    fun unsubscribeStreamEvent(streamFilter: StreamFilter) {
+    fun unsubscribeStreamEvent(filter: Filter) {
         viewModelScope.launch {
             _mutexFlow.withLock {
-                _streamFilterSet.removeIf { it.id == streamFilter.id }
+                _streamEventMap[filter]?.let {
+                    if (it.first > 0) {
+                        _streamEventMap[filter] = it.copy(first = it.first - 1)
+                        // TODO since
+                        sendStream()
+                    }
+                }
             }
-            sendStream()
         }
     }
 

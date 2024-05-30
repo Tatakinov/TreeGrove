@@ -83,6 +83,10 @@
     <string name="repost">repost</string>
     <string name="confirm_repost">do repost?</string>
     <string name="notification">Notification</string>
+    <string name="show_content_warning">Content Warning: %s</string>
+    <string name="at_channel" translatable="false">\@%s</string>
+    <string name="content_warning" translatable="false">CW</string>
+    <string name="reason">reason</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

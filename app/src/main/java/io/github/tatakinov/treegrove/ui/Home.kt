@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -56,7 +57,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.StreamFilter
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
@@ -74,27 +74,8 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
     val tabList = remember { viewModel.tabList }
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabList.size })
     val channelFilter = Filter(kinds = listOf(Kind.ChannelCreation.num))
-    val channelList by viewModel.subscribeStreamEvent(StreamFilter(id = "channel", filter = channelFilter)).collectAsState()
+    val channelList by viewModel.subscribeStreamEvent(channelFilter).collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
-    BackHandler(tabList.isNotEmpty()) {
-        val filter = when (val screen = tabList.removeAt(pagerState.currentPage)) {
-            is Screen.OwnTimeline -> {
-                StreamFilter(id = "own@${screen.id}", filter = Filter())
-            }
-            is Screen.Timeline -> {
-                StreamFilter(id = "timeline@${screen.id}", Filter(kinds = listOf(Kind.Text.num), authors = listOf(screen.id)))
-            }
-            is Screen.Channel -> {
-                StreamFilter(id = "channel@${screen.id}", Filter(kinds = listOf(Kind.ChannelMessage.num), tags = mapOf("e" to listOf(screen.id))))
-            }
-            else -> {
-                null
-            }
-        }
-        if (filter != null) {
-            viewModel.unsubscribeStreamEvent(filter)
-        }
-    }
     ModalNavigationDrawer(drawerState = drawerState, drawerContent = {
         val relayInfoList by viewModel.relayInfoListFlow.collectAsState()
         ModalDrawerSheet(modifier = Modifier.padding(end = 100.dp)) {
@@ -103,27 +84,22 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
             var expandPinnedChannelList by remember { mutableStateOf(false) }
             var expandChannelList by remember { mutableStateOf(false) }
             val pub = NIP19.parse(publicKey)
-            val pinnedChannelFilter = if (pub is NIP19.Data.Pub) {
-                StreamFilter(id = "pinned_channel", filter = Filter(kinds = listOf(Kind.ChannelList.num), authors = listOf(pub.id)))
-            }
-            else {
-                StreamFilter(id = "invalid", filter = Filter())
-            }
-            val pinnedChannelList by viewModel.subscribeStreamEvent(pinnedChannelFilter).collectAsState()
-            LazyColumn(state = listState) {
-                item {
-                    Row {
-                        Button(
-                            onClick = {
-                                coroutineScope.launch {
-                                    drawerState.close()
+            if (pub is NIP19.Data.Pub) {
+                val pinnedChannelFilter = Filter(kinds = listOf(Kind.ChannelList.num), authors = listOf(pub.id))
+                val pinnedChannelList by viewModel.subscribeStreamEvent(pinnedChannelFilter).collectAsState()
+                LazyColumn(state = listState) {
+                    item {
+                        Row {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        drawerState.close()
+                                    }
+                                    onNavigateSetting()
                                 }
-                                onNavigateSetting()
+                            ) {
+                                Icon(Icons.Filled.Settings, "setting")
                             }
-                        ) {
-                            Icon(Icons.Filled.Settings, "setting")
-                        }
-                        if (pub is NIP19.Data.Pub) {
                             Button(
                                 onClick = {
                                     coroutineScope.launch {
@@ -136,88 +112,86 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             }
                         }
                     }
-                }
-                item {
-                    HorizontalDivider()
-                }
-                item {
-                    val transmittedDataSize by viewModel.transmittedSizeFlow.collectAsState()
-                    var dataSize = transmittedDataSize
-                    for (relayInfo in relayInfoList) {
-                        dataSize += relayInfo.transmittedSize
-                    }
-                    lateinit var unit: String
-                    var s: Double = dataSize.toDouble()
-                    if (s < 1024) {
-                        unit = "B"
-                    } else if (s < 1024 * 1024) {
-                        unit = "kB"
-                        s /= 1024
-                    } else if (s < 1024 * 1024 * 1024) {
-                        unit = "MB"
-                        s /= 1024 * 1024
-                    } else {
-                        unit = "GB"
-                        s /= 1024 * 1024 * 1024
-                    }
-                    val text: String = if (unit == "B") {
-                        "%.0f%s".format(s, unit)
-                    } else {
-                        "%.1f%s".format(s, unit)
-                    }
-                    Text(text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
-                }
-                item {
-                    HorizontalDivider()
-                }
-                item {
-                    Row {
-                        var searchWord by remember { mutableStateOf("") }
-                        TextField(value = searchWord, onValueChange = {
-                            searchWord = it.replace("\n", "")
-                        }, maxLines = 1, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
-                        Button(onClick = {
-                        }) {
-                            Icon(Icons.Filled.Search, "search")
-                        }
-                    }
-                }
-                item {
-                    HorizontalDivider()
-                }
-                item {
-                    NavigationDrawerItem(
-                        label = {
-                            Text(stringResource(id = R.string.relay_connection_status))
-                        },
-                        selected = false,
-                        onClick = {
-                            expandRelayList = !expandRelayList
-                        })
-                }
-                if (expandRelayList) {
                     item {
                         HorizontalDivider()
                     }
-                    items(items = relayInfoList, key = { it.url }) { info ->
+                    item {
+                        val transmittedDataSize by viewModel.transmittedSizeFlow.collectAsState()
+                        var dataSize = transmittedDataSize
+                        for (relayInfo in relayInfoList) {
+                            dataSize += relayInfo.transmittedSize
+                        }
+                        lateinit var unit: String
+                        var s: Double = dataSize.toDouble()
+                        if (s < 1024) {
+                            unit = "B"
+                        } else if (s < 1024 * 1024) {
+                            unit = "kB"
+                            s /= 1024
+                        } else if (s < 1024 * 1024 * 1024) {
+                            unit = "MB"
+                            s /= 1024 * 1024
+                        } else {
+                            unit = "GB"
+                            s /= 1024 * 1024 * 1024
+                        }
+                        val text: String = if (unit == "B") {
+                            "%.0f%s".format(s, unit)
+                        } else {
+                            "%.1f%s".format(s, unit)
+                        }
+                        Text(text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        Row {
+                            var searchWord by remember { mutableStateOf("") }
+                            TextField(value = searchWord, onValueChange = {
+                                searchWord = it.replace("\n", "")
+                            }, maxLines = 1, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+                            Button(onClick = {
+                            }) {
+                                Icon(Icons.Filled.Search, "search")
+                            }
+                        }
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
                         NavigationDrawerItem(
                             label = {
-                                Row {
-                                    Text(info.url, modifier = Modifier.weight(1f))
-                                    if (info.isConnected) {
-                                        Icon(Icons.Filled.Check, "is_connected")
-                                    } else {
-                                        Icon(Icons.Filled.Clear, "not_connected")
-                                    }
-                                }
+                                Text(stringResource(id = R.string.relay_connection_status))
                             },
                             selected = false,
                             onClick = {
-                                viewModel.connectRelay()
+                                expandRelayList = !expandRelayList
                             })
                     }
-                }
-                if (pub is NIP19.Data.Pub) {
+                    if (expandRelayList) {
+                        item {
+                            HorizontalDivider()
+                        }
+                        items(items = relayInfoList, key = { it.url }) { info ->
+                            NavigationDrawerItem(
+                                label = {
+                                    Row {
+                                        Text(info.url, modifier = Modifier.weight(1f))
+                                        if (info.isConnected) {
+                                            Icon(Icons.Filled.Check, "is_connected")
+                                        } else {
+                                            Icon(Icons.Filled.Clear, "not_connected")
+                                        }
+                                    }
+                                },
+                                selected = false,
+                                onClick = {
+                                    viewModel.connectRelay()
+                                })
+                        }
+                    }
                     item {
                         HorizontalDivider()
                     }
@@ -276,86 +250,233 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                 }
                             })
                     }
-                }
-                item {
-                    HorizontalDivider()
-                }
-                item {
-                    NavigationDrawerItem(
-                        label = {
-                            Text(stringResource(id = R.string.pinned_channel))
-                        },
-                        selected = false,
-                        onClick = { expandPinnedChannelList = !expandPinnedChannelList })
-                }
-                if (expandPinnedChannelList) {
-                    items(items = pinnedChannelList, key = { it.toJSONObject().toString() }) { channel ->
-                        ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
-                            if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
-                                tabList.add(Screen.Channel(channel.id, channel.pubkey))
-                            }
-                            var index = -1
-                            for (i in tabList.indices) {
-                                if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
-                                    index = i
-                                    break
-                                }
-                            }
-                            coroutineScope.launch {
-                                drawerState.close()
-                            }
-                            if (index >= 0) {
-                                coroutineScope.launch {
-                                    pagerState.scrollToPage(index)
-                                }
-                            }
-                        })
-                    }
-                }
-                item {
-                    HorizontalDivider()
-                }
-                item {
-                    NavigationDrawerItem(
-                        label = {
-                            Text(stringResource(id = R.string.list_of_channel))
-                        },
-                        selected = false,
-                        onClick = { expandChannelList = !expandChannelList })
-                }
-                if (expandChannelList) {
                     item {
                         HorizontalDivider()
                     }
-                    items(items = channelList, key = { it.toJSONObject().toString() }) { channel ->
-                        ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
-                            if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
-                                tabList.add(Screen.Channel(channel.id, channel.pubkey))
-                            }
-                            var index = -1
-                            for (i in tabList.indices) {
-                                if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
-                                    index = i
-                                    break
+                    item {
+                        NavigationDrawerItem(
+                            label = {
+                                Text(stringResource(id = R.string.pinned_channel))
+                            },
+                            selected = false,
+                            onClick = { expandPinnedChannelList = !expandPinnedChannelList })
+                    }
+                    if (expandPinnedChannelList) {
+                        items(items = pinnedChannelList, key = { it.toJSONObject().toString() }) { channel ->
+                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                                if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
+                                    tabList.add(Screen.Channel(channel.id, channel.pubkey))
                                 }
-                            }
-                            coroutineScope.launch {
-                                drawerState.close()
-                            }
-                            if (index >= 0) {
+                                var index = -1
+                                for (i in tabList.indices) {
+                                    if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
+                                        index = i
+                                        break
+                                    }
+                                }
                                 coroutineScope.launch {
-                                    pagerState.scrollToPage(index)
+                                    drawerState.close()
                                 }
-                            }
-                        })
+                                if (index >= 0) {
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(index)
+                                    }
+                                }
+                            })
+                        }
                     }
                     item {
-                        LoadMoreEventsButton(viewModel = viewModel, filter = channelFilter)
+                        HorizontalDivider()
+                    }
+                    item {
+                        NavigationDrawerItem(
+                            label = {
+                                Text(stringResource(id = R.string.list_of_channel))
+                            },
+                            selected = false,
+                            onClick = { expandChannelList = !expandChannelList })
+                    }
+                    if (expandChannelList) {
+                        item {
+                            HorizontalDivider()
+                        }
+                        items(items = channelList, key = { it.toJSONObject().toString() }) { channel ->
+                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                                if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
+                                    tabList.add(Screen.Channel(channel.id, channel.pubkey))
+                                }
+                                var index = -1
+                                for (i in tabList.indices) {
+                                    if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
+                                        index = i
+                                        break
+                                    }
+                                }
+                                coroutineScope.launch {
+                                    drawerState.close()
+                                }
+                                if (index >= 0) {
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(index)
+                                    }
+                                }
+                            })
+                        }
+                        item {
+                            LoadMoreEventsButton(viewModel = viewModel, filter = channelFilter)
+                        }
+                    }
+                }
+                DisposableEffect(pub.id) {
+                    onDispose {
+                        viewModel.unsubscribeStreamEvent(pinnedChannelFilter)
+                    }
+                }
+            }
+            else {
+                LazyColumn(state = listState) {
+                    item {
+                        Row {
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        drawerState.close()
+                                    }
+                                    onNavigateSetting()
+                                }
+                            ) {
+                                Icon(Icons.Filled.Settings, "setting")
+                            }
+                        }
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        val transmittedDataSize by viewModel.transmittedSizeFlow.collectAsState()
+                        var dataSize = transmittedDataSize
+                        for (relayInfo in relayInfoList) {
+                            dataSize += relayInfo.transmittedSize
+                        }
+                        lateinit var unit: String
+                        var s: Double = dataSize.toDouble()
+                        if (s < 1024) {
+                            unit = "B"
+                        } else if (s < 1024 * 1024) {
+                            unit = "kB"
+                            s /= 1024
+                        } else if (s < 1024 * 1024 * 1024) {
+                            unit = "MB"
+                            s /= 1024 * 1024
+                        } else {
+                            unit = "GB"
+                            s /= 1024 * 1024 * 1024
+                        }
+                        val text: String = if (unit == "B") {
+                            "%.0f%s".format(s, unit)
+                        } else {
+                            "%.1f%s".format(s, unit)
+                        }
+                        Text(text, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        Row {
+                            var searchWord by remember { mutableStateOf("") }
+                            TextField(value = searchWord, onValueChange = {
+                                searchWord = it.replace("\n", "")
+                            }, maxLines = 1, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
+                            Button(onClick = {
+                            }) {
+                                Icon(Icons.Filled.Search, "search")
+                            }
+                        }
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        NavigationDrawerItem(
+                            label = {
+                                Text(stringResource(id = R.string.relay_connection_status))
+                            },
+                            selected = false,
+                            onClick = {
+                                expandRelayList = !expandRelayList
+                            })
+                    }
+                    if (expandRelayList) {
+                        item {
+                            HorizontalDivider()
+                        }
+                        items(items = relayInfoList, key = { it.url }) { info ->
+                            NavigationDrawerItem(
+                                label = {
+                                    Row {
+                                        Text(info.url, modifier = Modifier.weight(1f))
+                                        if (info.isConnected) {
+                                            Icon(Icons.Filled.Check, "is_connected")
+                                        } else {
+                                            Icon(Icons.Filled.Clear, "not_connected")
+                                        }
+                                    }
+                                },
+                                selected = false,
+                                onClick = {
+                                    viewModel.connectRelay()
+                                })
+                        }
+                    }
+                    item {
+                        HorizontalDivider()
+                    }
+                    item {
+                        NavigationDrawerItem(
+                            label = {
+                                Text(stringResource(id = R.string.list_of_channel))
+                            },
+                            selected = false,
+                            onClick = { expandChannelList = !expandChannelList })
+                    }
+                    if (expandChannelList) {
+                        item {
+                            HorizontalDivider()
+                        }
+                        items(items = channelList, key = { it.toJSONObject().toString() }) { channel ->
+                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                                if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
+                                    tabList.add(Screen.Channel(channel.id, channel.pubkey))
+                                }
+                                var index = -1
+                                for (i in tabList.indices) {
+                                    if (tabList[i] is Screen.Channel && tabList[i].id == channel.id) {
+                                        index = i
+                                        break
+                                    }
+                                }
+                                coroutineScope.launch {
+                                    drawerState.close()
+                                }
+                                if (index >= 0) {
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(index)
+                                    }
+                                }
+                            })
+                        }
+                        item {
+                            LoadMoreEventsButton(viewModel = viewModel, filter = channelFilter)
+                        }
                     }
                 }
             }
         }
     }) {
+        BackHandler(tabList.isNotEmpty()) {
+            tabList.removeAt(pagerState.currentPage)
+        }
         Scaffold(floatingActionButton = {
             if (tabList.isNotEmpty()) {
                 FloatingActionButton(onClick = {

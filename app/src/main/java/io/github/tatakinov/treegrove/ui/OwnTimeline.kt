@@ -9,6 +9,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.StreamFilter
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
@@ -40,10 +40,12 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
     }
     var expandFollowerList by remember { mutableStateOf(false) }
     val followerFilter = Filter(kinds = listOf(Kind.Contacts.num), tags = mapOf("p" to listOf(id)))
-    val followerListEvent by viewModel.subscribeStreamEvent(StreamFilter(id = "follower@${id}", filter = followerFilter)).collectAsState()
+    val followerListFlow = remember { viewModel.subscribeStreamEvent(followerFilter) }
+    val followerListEvent by followerListFlow.collectAsState()
     if (followeeList.isNotEmpty()) {
-        val eventFilter = Filter(kinds = listOf(Kind.Text.num, Kind.Repost.num, Kind.GenericRepost.num), authors = followeeList.map { it.key })
-        val eventList by viewModel.subscribeStreamEvent(StreamFilter(id = "own@${id}", filter = eventFilter)).collectAsState()
+        val eventFilter = Filter(kinds = listOf(Kind.Text.num, Kind.Repost.num, Kind.GenericRepost.num, Kind.ChannelMessage.num), authors = followeeList.map { it.key })
+        val eventListFlow = remember { viewModel.subscribeStreamEvent(eventFilter) }
+        val eventList by eventListFlow.collectAsState()
         val listState = rememberLazyListState()
         LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
             item {
@@ -82,13 +84,21 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
                 LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
             }
         }
-        LaunchedEffect(id) {
+        DisposableEffect(id) {
             if (eventList.isEmpty()) {
                 viewModel.fetchPastPost(eventFilter)
+            }
+            onDispose {
+                viewModel.unsubscribeStreamEvent(eventFilter)
             }
         }
     }
     else {
         Text(stringResource(id = R.string.follow_someone))
+    }
+    DisposableEffect(id) {
+        onDispose {
+            viewModel.unsubscribeStreamEvent(followerFilter)
+        }
     }
 }

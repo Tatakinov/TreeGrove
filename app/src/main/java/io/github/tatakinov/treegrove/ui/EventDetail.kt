@@ -36,10 +36,10 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
             LazyColumn(state = listState) {
                 items(items = parentEventList.sortedBy { it.createdAt },
                     key = { it.toJSONObject().toString() }) {
-                    TextEvent(viewModel, it, onNavigate, onAddScreen = onAddScreen, onNavigateImage, false)
+                    EventContainer(viewModel, it, onNavigate, onAddScreen = onAddScreen, onNavigateImage, false)
                 }
                 item {
-                    TextEvent(
+                    EventContainer(
                         viewModel,
                         event,
                         onNavigate,
@@ -52,7 +52,7 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
                 items(
                     items = el.sortedBy { it.createdAt },
                     key = { it.toJSONObject().toString() }) {
-                    TextEvent(viewModel, it, onNavigate, onAddScreen, onNavigateImage, false)
+                    EventContainer(viewModel, it, onNavigate, onAddScreen, onNavigateImage, false)
                 }
             }
         }
@@ -64,7 +64,7 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
             val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
             LazyColumn(state = listState) {
                 item {
-                    TextEvent(
+                    EventContainer(
                         viewModel,
                         event,
                         onNavigate,
@@ -77,7 +77,7 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
                 items(
                     items = el.sortedBy { it.createdAt },
                     key = { it.toJSONObject().toString() }) {
-                    TextEvent(viewModel, it, onNavigate, onAddScreen, onNavigateImage, false)
+                    EventContainer(viewModel, it, onNavigate, onAddScreen, onNavigateImage, false)
                 }
             }
         }

@@ -4,10 +4,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import io.github.tatakinov.treegrove.StreamFilter
+import androidx.compose.runtime.remember
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
@@ -21,7 +21,8 @@ fun Notification(viewModel: TreeGroveViewModel, onNavigate: (Event?) -> Unit, on
     if (pub is NIP19.Data.Pub) {
         // TODO support contacts
         val filter = Filter(kinds = listOf(Kind.Text.num, Kind.Repost.num, Kind.GenericRepost.num, Kind.ChannelMessage.num), tags = mapOf("e" to listOf(pub.id)))
-        val eventList by viewModel.subscribeStreamEvent(StreamFilter("notification@${pub.id}", filter)).collectAsState()
+        val eventListFlow = remember { viewModel.subscribeStreamEvent(filter) }
+        val eventList by eventListFlow.collectAsState()
         val listState = rememberLazyListState()
         LazyColumn(state = listState) {
             items (items = eventList, key = { it.toJSONObject().toString() }) { event ->
@@ -38,9 +39,12 @@ fun Notification(viewModel: TreeGroveViewModel, onNavigate: (Event?) -> Unit, on
                 LoadMoreEventsButton(viewModel = viewModel, filter = filter)
             }
         }
-        LaunchedEffect(pub.id) {
+        DisposableEffect(pub.id) {
             if (eventList.isEmpty()) {
                 viewModel.fetchPastPost(filter)
+            }
+            onDispose {
+                viewModel.unsubscribeStreamEvent(filter)
             }
         }
     }

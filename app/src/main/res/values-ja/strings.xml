@@ -72,4 +72,6 @@
     <string name="repost">リポスト</string>
     <string name="confirm_repost">リポストしますか？</string>
     <string name="notification">通知</string>
+    <string name="show_content_warning">センシティブな内容を含んでいる可能性があります: %s</string>
+    <string name="reason">理由</string>
 </resources>

@@ -7,12 +7,13 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import io.github.tatakinov.treegrove.LoadingData
-import io.github.tatakinov.treegrove.StreamFilter
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
@@ -25,7 +26,8 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
     val metaDataFilter = Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(pubKey), tags = mapOf("e" to listOf(id)))
     val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
     val eventFilter = Filter(kinds = listOf(Kind.ChannelMessage.num), tags = mapOf("e" to listOf(id)))
-    val eventList by viewModel.subscribeStreamEvent(StreamFilter(id = "channel@${id}", filter = eventFilter)).collectAsState()
+    val eventListFlow = remember { viewModel.subscribeStreamEvent(eventFilter) }
+    val eventList by eventListFlow.collectAsState()
     Column {
         val m = metaData
         if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
@@ -47,7 +49,8 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
                     onNavigate = onNavigate,
                     onAddScreen = onAddScreen,
                     onNavigateImage = onNavigateImage,
-                    isFocused = false
+                    isFocused = false,
+                    suppressDetail = true
                 )
             }
             item {
@@ -56,9 +59,12 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
             }
         }
     }
-    LaunchedEffect(id) {
+    DisposableEffect(id) {
         if (eventList.isEmpty()) {
             viewModel.fetchPastPost(eventFilter)
+        }
+        onDispose {
+            viewModel.unsubscribeStreamEvent(eventFilter)
         }
     }
 }

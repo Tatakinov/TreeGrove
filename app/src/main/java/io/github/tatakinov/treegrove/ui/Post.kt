@@ -2,11 +2,13 @@ package io.github.tatakinov.treegrove.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,6 +44,8 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
     val privateKey by viewModel.privateKeyFlow.collectAsState()
     val publicKey by viewModel.publicKeyFlow.collectAsState()
     var text by remember { mutableStateOf("") }
+    var isContentWarning by remember { mutableStateOf(false) }
+    var contentWarning by remember { mutableStateOf("") }
     var openConfirmDialog by remember { mutableStateOf(false) }
     val filter = if (event != null) {
         Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(event.pubkey))
@@ -59,12 +63,25 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
     val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
     Column {
         if (event != null) {
-            TextEvent(viewModel, event, onNavigate = null, onAddScreen = null, onNavigateImage = null, isFocused = false)
+            EventContainer(viewModel, event, onNavigate = null, onAddScreen = null, onNavigateImage = null, isFocused = false)
             HorizontalDivider()
         }
         TextField(value = text, onValueChange = {
             text = it
         }, modifier = Modifier.fillMaxWidth())
+        Row {
+            Text(text = stringResource(id = R.string.content_warning))
+            Checkbox(checked = isContentWarning, onCheckedChange = {
+                isContentWarning = it
+            })
+            if (isContentWarning) {
+                TextField(label = {
+                    Text(stringResource(id = R.string.reason))
+                }, value = contentWarning, onValueChange = {
+                    contentWarning = it
+                })
+            }
+        }
         Button(onClick = {
             openConfirmDialog = true
         }) {
@@ -164,28 +181,28 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                                 Kind.Text.num
                             }
                         }
-                    val t =
+                    val tags =
                         if (event != null) {
-                            val tags = mutableListOf<List<String>>()
-                            tags.addAll(event.tags.filter { it.size >= 2 && (it[0] == "e" || it[0] == "p") })
-                            if (tags.none { it[0] == "e" }) {
-                                tags.add(listOf("e", event.id, "", "root"))
+                            val t = mutableListOf<List<String>>()
+                            t.addAll(event.tags.filter { it.size >= 2 && (it[0] == "e" || it[0] == "p") })
+                            if (t.none { it[0] == "e" }) {
+                                t.add(listOf("e", event.id, "", "root"))
                             }
                             else {
-                                tags.add(listOf("e", event.id, "", "reply"))
+                                t.add(listOf("e", event.id, "", "reply"))
                             }
-                            if (tags.isEmpty() || tags.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
-                                tags.add(listOf("p", event.pubkey))
+                            if (t.isEmpty() || t.none { it.size >= 2 && it[0] == "p" && it[1] == event.pubkey }) {
+                                t.add(listOf("p", event.pubkey))
                             }
-                            tags
+                            t
                         }
                         else {
                             when (screen) {
                                 is Screen.OwnTimeline -> {
-                                    listOf()
+                                    mutableListOf()
                                 }
                                 is Screen.Timeline -> {
-                                    listOf(listOf("p", screen.id))
+                                    mutableListOf(listOf("p", screen.id))
                                 }
                                 is Screen.Channel -> {
                                     val m = metaData
@@ -198,18 +215,21 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
                                     tags
                                 }
                                 is Screen.EventDetail -> {
-                                    listOf(listOf("p", screen.pubkey))
+                                    mutableListOf(listOf("p", screen.pubkey))
                                 }
                                 is Screen.ChannelEventDetail -> {
                                     // TODO recommended relay
-                                    listOf(listOf("e", screen.channelID, "", "root"))
+                                    mutableListOf(listOf("e", screen.channelID, "", "root"))
                                 }
                                 is Screen.Notification -> {
-                                    listOf()
+                                    mutableListOf()
                                 }
                             }
                         }
-                    Misc.post(viewModel, kind, text, t, priv, pub, onSuccess = {}, onFailure = { url, reason ->
+                    if (isContentWarning) {
+                        tags.add(listOf("content-warning", contentWarning))
+                    }
+                    Misc.post(viewModel, kind, text, tags, priv, pub, onSuccess = {}, onFailure = { url, reason ->
                         coroutineScope.launch {
                             Toast.makeText(context, context.getString(R.string.error_failed_to_post, reason), Toast.LENGTH_SHORT).show()
                         }

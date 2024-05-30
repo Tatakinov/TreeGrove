@@ -17,7 +17,7 @@ import kotlin.concurrent.withLock
 data class Data1(val status: ConnectionStatus, val onReceive: (String, List<Event>) -> Unit)
 data class Data2(val event: Event, val onSuccess: () -> Unit, val onFailure: (String, String) -> Unit)
 
-class Relay (private val _url : String, private val _listener : OnRelayListener) {
+class Relay (private val _url : String, private var _read: Boolean = true, private var _write: Boolean = true, private val _listener : OnRelayListener) {
     private val streamID = "stream"
     private val oneShotID = "oneshot"
     private var _socket: WebSocket? = null
@@ -26,8 +26,6 @@ class Relay (private val _url : String, private val _listener : OnRelayListener)
     private var _stream: Set<Filter>? = null
     private val _oneShotQueue = mutableMapOf<Filter, Data1>()
     private var _oneShotEventList: MutableList<Event>? = null
-    private var _read = true
-    private var _write = true
 
     fun url(): String {
         return _url

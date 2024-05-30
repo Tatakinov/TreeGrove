@@ -111,10 +111,15 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                         pubkeyMap[e.id] = ev.pubkey
                     }
                     else if (ev.kind == Kind.ChannelMessage.num) {
-                        val eTagList = ev.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
-                        if (eTagList.isNotEmpty()) {
+                        val ids = if (event.tags.any { it.size >= 4 && it[0] == "e" && it[3] == "root" }) {
+                            listOf(event.tags.filter { it.size >= 4 && it[0] == "e" && it[3] == "root" }.map { it[1] }.first())
+                        }
+                        else {
+                            event.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                        }
+                        if (ids.isNotEmpty()) {
                             val channelFilter =
-                                Filter(ids = eTagList, kinds = listOf(Kind.ChannelCreation.num))
+                                Filter(ids = ids, kinds = listOf(Kind.ChannelCreation.num))
                             val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
                                 .collectAsState()
                             if (channelEvent.isNotEmpty()) {
@@ -151,10 +156,15 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                 if (eventList.isNotEmpty()) {
                     val ev = eventList.first()
                     if (ev.kind == Kind.ChannelMessage.num) {
-                        val eTagList = ev.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
-                        if (eTagList.isNotEmpty()) {
+                        val channelIDs = if (event.tags.any { it.size >= 4 && it[0] == "e" && it[3] == "root" }) {
+                            listOf(event.tags.filter { it.size >= 4 && it[0] == "e" && it[3] == "root" }.map { it[1] }.first())
+                        }
+                        else {
+                            event.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                        }
+                        if (channelIDs.isNotEmpty()) {
                             val channelFilter =
-                                Filter(ids = eTagList, kinds = listOf(Kind.ChannelCreation.num))
+                                Filter(ids = channelIDs, kinds = listOf(Kind.ChannelCreation.num))
                             val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
                                 .collectAsState()
                             if (channelEvent.isNotEmpty()) {
@@ -400,7 +410,6 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                 ClickableText(
                     text = annotated,
                     onClick = { offset ->
-                        var tapped = false
                         annotated.getStringAnnotations(tag = "image", start = offset, end = offset)
                             .firstOrNull()?.let {
                                 if (onNavigateImage != null) {
@@ -410,7 +419,6 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                         annotated.getStringAnnotations(tag = "url", start = offset, end = offset)
                             .firstOrNull()?.let {
                                 uriHandler.openUri(it.item)
-                                tapped = true
                             }
                         annotated.getStringAnnotations(tag = "nevent", start = offset, end = offset)
                             .firstOrNull()?.let {

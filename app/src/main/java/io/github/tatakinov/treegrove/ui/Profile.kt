@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,7 +35,6 @@ import androidx.compose.ui.text.input.ImeAction
 import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.Misc
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.StreamFilter
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
@@ -61,7 +61,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
             val followeeListEvent by viewModel.subscribeReplaceableEvent(followeeFilter).collectAsState()
             var expandFollowerList by remember { mutableStateOf(false) }
             val followerFilter = Filter(kinds = listOf(Kind.Contacts.num), tags = mapOf("p" to listOf(pub.id)))
-            val followerListEvent by viewModel.subscribeStreamEvent(StreamFilter(id = "follower@${pub.id}", filter = followerFilter)).collectAsState()
+            val followerListEvent by viewModel.subscribeStreamEvent(followerFilter).collectAsState()
             var name by remember { mutableStateOf("") }
             var about by remember { mutableStateOf("") }
             var picture by remember { mutableStateOf("") }
@@ -277,6 +277,11 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                     val data = c.data
                     followeeList.clear()
                     followeeList.addAll(data.list.distinctBy { it.key })
+                }
+            }
+            DisposableEffect(pub.id) {
+                onDispose {
+                    viewModel.unsubscribeStreamEvent(followerFilter)
                 }
             }
         }

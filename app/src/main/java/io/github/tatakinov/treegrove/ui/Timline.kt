@@ -11,6 +11,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -22,7 +23,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.StreamFilter
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
@@ -31,8 +31,9 @@ import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
 
 @Composable
 fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
-    val eventFilter = Filter(kinds = listOf(Kind.Text.num, Kind.Repost.num, Kind.GenericRepost.num), authors = listOf(id))
-    val eventList by viewModel.subscribeStreamEvent(StreamFilter(id = "timeline@${id}", filter = eventFilter)).collectAsState()
+    val eventFilter = Filter(kinds = listOf(Kind.Text.num, Kind.Repost.num, Kind.GenericRepost.num, Kind.ChannelMessage.num), authors = listOf(id))
+    val eventListFlow = remember { viewModel.subscribeStreamEvent(eventFilter) }
+    val eventList by eventListFlow.collectAsState()
     val metaDataFilter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(id))
     val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
     val listState = rememberLazyListState()
@@ -48,7 +49,8 @@ fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> 
     }
     var expandFollowerList by remember { mutableStateOf(false) }
     val followerFilter = Filter(kinds = listOf(Kind.Contacts.num), tags = mapOf("p" to listOf(id)))
-    val followerListEvent by viewModel.subscribeStreamEvent(StreamFilter(id = "follower@${id}", filter = followerFilter)).collectAsState()
+    val followerListFlow = viewModel.subscribeStreamEvent(followerFilter)
+    val followerListEvent by followerListFlow.collectAsState()
     LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
         val m = metaData
         item {
@@ -93,9 +95,13 @@ fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> 
             LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
         }
     }
-    LaunchedEffect(id) {
+    DisposableEffect(id) {
         if (eventList.isEmpty()) {
             viewModel.fetchPastPost(eventFilter)
+        }
+        onDispose {
+            viewModel.unsubscribeStreamEvent(eventFilter)
+            viewModel.unsubscribeStreamEvent(followerFilter)
         }
     }
 }
