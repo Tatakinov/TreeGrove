@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -79,7 +80,7 @@ fun ChannelTitle(viewModel: TreeGroveViewModel, id: String, name: String, about:
                                 }
                             })
                         }) {
-                            Icon(Icons.Filled.Clear, "unpin")
+                            Icon(Icons.Default.Remove, "unpin")
                         }
                     }
                     else {
@@ -107,7 +108,7 @@ fun ChannelTitle(viewModel: TreeGroveViewModel, id: String, name: String, about:
                                 }
                             })
                         }) {
-                            Icon(Icons.Filled.Add, "pin")
+                            Icon(Icons.Default.Add, "pin")
                         }
                     }
                 }
@@ -134,7 +135,7 @@ fun ChannelTitle(viewModel: TreeGroveViewModel, id: String, name: String, about:
                             }
                         })
                     }) {
-                        Icon(Icons.Filled.Add, "pin")
+                        Icon(Icons.Default.Add, "pin")
                     }
                 }
             }

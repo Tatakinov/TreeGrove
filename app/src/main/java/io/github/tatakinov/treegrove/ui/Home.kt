@@ -98,7 +98,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                     onNavigateSetting()
                                 }
                             ) {
-                                Icon(Icons.Filled.Settings, "setting")
+                                Icon(Icons.Default.Settings, "setting")
                             }
                             Button(
                                 onClick = {
@@ -108,7 +108,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                     onNavigateProfile()
                                 }
                             ) {
-                                Icon(Icons.Filled.Person, "profile")
+                                Icon(Icons.Default.Person, "profile")
                             }
                         }
                     }
@@ -153,7 +153,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             }, maxLines = 1, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
                             Button(onClick = {
                             }) {
-                                Icon(Icons.Filled.Search, "search")
+                                Icon(Icons.Default.Search, "search")
                             }
                         }
                     }
@@ -180,9 +180,9 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                     Row {
                                         Text(info.url, modifier = Modifier.weight(1f))
                                         if (info.isConnected) {
-                                            Icon(Icons.Filled.Check, "is_connected")
+                                            Icon(Icons.Default.Check, "is_connected")
                                         } else {
-                                            Icon(Icons.Filled.Clear, "not_connected")
+                                            Icon(Icons.Default.Clear, "not_connected")
                                         }
                                     }
                                 },
@@ -197,7 +197,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                     }
                     item {
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.Filled.Home, "home") },
+                            icon = { Icon(Icons.Default.Home, "home") },
                             label = { Text(stringResource(id = R.string.home)) },
                             selected = false,
                             onClick = {
@@ -226,7 +226,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                     }
                     item {
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.Filled.Notifications, "notification") },
+                            icon = { Icon(Icons.Default.Notifications, "notification") },
                             label = { Text(stringResource(id = R.string.notification)) },
                             selected = false,
                             onClick = {
@@ -345,7 +345,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                     onNavigateSetting()
                                 }
                             ) {
-                                Icon(Icons.Filled.Settings, "setting")
+                                Icon(Icons.Default.Settings, "setting")
                             }
                         }
                     }
@@ -390,7 +390,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             }, maxLines = 1, modifier = Modifier.weight(1f), keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done))
                             Button(onClick = {
                             }) {
-                                Icon(Icons.Filled.Search, "search")
+                                Icon(Icons.Default.Search, "search")
                             }
                         }
                     }
@@ -417,9 +417,9 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                     Row {
                                         Text(info.url, modifier = Modifier.weight(1f))
                                         if (info.isConnected) {
-                                            Icon(Icons.Filled.Check, "is_connected")
+                                            Icon(Icons.Default.Check, "is_connected")
                                         } else {
-                                            Icon(Icons.Filled.Clear, "not_connected")
+                                            Icon(Icons.Default.Clear, "not_connected")
                                         }
                                     }
                                 },
@@ -482,7 +482,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                 FloatingActionButton(onClick = {
                     onNavigatePost(tabList[pagerState.currentPage], null)
                 }) {
-                    Icon(Icons.Filled.Create, "post")
+                    Icon(Icons.Default.Create, "post")
                 }
             }
         }, bottomBar = {

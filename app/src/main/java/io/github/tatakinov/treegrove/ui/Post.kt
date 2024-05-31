@@ -85,7 +85,7 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
         Button(onClick = {
             openConfirmDialog = true
         }) {
-            Icon(Icons.AutoMirrored.Filled.Send, "send")
+            Icon(Icons.AutoMirrored.Default.Send, "send")
         }
     }
     if (openConfirmDialog) {

@@ -359,7 +359,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                             m.data.nip05.identify is LoadingData.Valid && m.data.nip05.identify.data
                         ) {
                             Icon(
-                                Icons.Filled.CheckCircle,
+                                Icons.Default.CheckCircle,
                                 "verified",
                                 modifier = Modifier.height(12.dp)
                             )

@@ -12,6 +12,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -168,7 +170,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                                     Button(onClick = {
                                         followeeList.remove(item)
                                     }) {
-                                        Icon(Icons.Filled.Delete, "delete")
+                                        Icon(Icons.Default.PersonRemove, "unfollow")
                                     }
                                 }
                             }
@@ -207,7 +209,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                                     Button(onClick = {
                                         followeeList.add(ReplaceableEvent.Contacts.Data(key = item.pubkey))
                                     }) {
-                                        Icon(Icons.Filled.Add, "add")
+                                        Icon(Icons.Default.PersonAdd, "follow")
                                     }
                                 }
                             }

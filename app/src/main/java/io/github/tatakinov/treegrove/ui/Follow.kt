@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PersonRemove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -76,7 +76,7 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                     Button(onClick = {
                         expandUnfollowDialog = true
                     }) {
-                        Icon(Icons.Filled.Clear, "unfollow")
+                        Icon(Icons.Default.PersonRemove, "unfollow")
                     }
                     if (expandUnfollowDialog) {
                         AlertDialog(
@@ -112,7 +112,7 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                     Button(onClick = {
                         expandFollowDialog = true
                     }) {
-                        Icon(Icons.Filled.Add, "follow")
+                        Icon(Icons.Default.PersonAdd, "follow")
                     }
                     if (expandFollowDialog) {
                         AlertDialog(
