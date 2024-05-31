@@ -31,6 +31,14 @@ class Relay (private val _url : String, private var _read: Boolean = true, priva
         return _url
     }
 
+    fun readable(): Boolean {
+        return _read
+    }
+
+    fun writable(): Boolean {
+        return _write
+    }
+
     fun change(read: Boolean, write: Boolean) {
         _read = read
         _write = write
@@ -202,7 +210,7 @@ class Relay (private val _url : String, private var _read: Boolean = true, priva
     }
 
     private fun sendStream() {
-        if (_socket == null) {
+        if (!isConnected()) {
             return
         }
         _stream?.let {
@@ -213,6 +221,9 @@ class Relay (private val _url : String, private var _read: Boolean = true, priva
     }
 
     fun sendStream(filterSet: Set<Filter>) {
+        if (!readable()) {
+            return
+        }
         val set = mutableSetOf<Filter>().apply {
             addAll(filterSet)
         }
@@ -223,7 +234,7 @@ class Relay (private val _url : String, private var _read: Boolean = true, priva
     }
 
     private fun sendOneShot() {
-        if (_socket == null) {
+        if (!isConnected() || !readable()) {
             return
         }
         val filterSet = mutableSetOf<Filter>()
@@ -247,6 +258,9 @@ class Relay (private val _url : String, private var _read: Boolean = true, priva
     }
 
     fun sendOneShot(filter: Filter, onReceive: (String, List<Event>) -> Unit) {
+        if (!readable()) {
+            return
+        }
         _lock.withLock {
             if (!_oneShotQueue.contains(filter)) {
                 _oneShotQueue[filter] = Data1(ConnectionStatus.Wait, onReceive)
