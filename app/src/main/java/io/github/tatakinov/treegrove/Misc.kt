@@ -21,7 +21,7 @@ object Misc {
         viewModel.post(e, onSuccess = onSuccess, onFailure = onFailure)
     }
 
-    fun post(viewModel: TreeGroveViewModel, kind: Int, content: String, tags: List<List<String>> = listOf(), priv: NIP19.Data.Sec, pub: NIP19.Data.Pub,
+    fun post(viewModel: TreeGroveViewModel, kind: Int, content: String, tags: List<List<String>>, priv: NIP19.Data.Sec, pub: NIP19.Data.Pub,
              onSuccess: () -> Unit, onFailure: (String, String) -> Unit) {
         val e = Event(kind = kind, content = content, tags = tags,
             createdAt = now(), pubkey = pub.id)

@@ -69,10 +69,10 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         }
     }
 
-    private fun addEventCache(url: String, event: Event, isOneShot: Boolean) {
+    private fun addEventCache(url: String, event: Event) {
         if (!_eventHashCache.contains(event)) {
             _eventHashCache.add(event)
-            _eventCache.add(EventInfo(listOf(url), event, isOneShot))
+            _eventCache.add(EventInfo(listOf(url), event))
         }
         else {
             for (i in _eventCache.indices) {
@@ -81,14 +81,14 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                         addAll(_eventCache[i].from)
                         add(url)
                     }
-                    _eventCache[i] = _eventCache[i].copy(from = list, isOneShot = _eventCache[i].isOneShot && isOneShot)
+                    _eventCache[i] = _eventCache[i].copy(from = list)
                     break
                 }
             }
         }
         if (event.kind == Kind.ChannelCreation.num) {
             val e = Event(kind = Kind.ChannelMetadata.num, content = event.content, createdAt = event.createdAt, pubkey = event.pubkey, tags = listOf(listOf("e", event.id)),)
-            addEventCache(url, e, isOneShot)
+            addEventCache(url, e)
         }
     }
 
@@ -183,7 +183,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                             override fun onEvent(relay: Relay, event: Event) {
                                 viewModelScope.launch {
                                     _mutexCache.withLock {
-                                        addEventCache(relay.url(), event, false)
+                                        addEventCache(relay.url(), event)
                                         _eventCache.sortByDescending { it.event.createdAt }
                                     }
                                     updateEventCache()
@@ -304,7 +304,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                 viewModelScope.launch {
                                     _mutexCache.withLock {
                                         for (event in eventList) {
-                                            addEventCache(url, event, false)
+                                            addEventCache(url, event)
                                         }
                                         _eventCache.sortByDescending { it.event.createdAt }
                                     }
@@ -350,7 +350,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                     map[url] = eventList.minByOrNull { it.createdAt }?.createdAt ?: 0
                                     _mutexCache.withLock {
                                         for (event in eventList) {
-                                            addEventCache(url, event, false)
+                                            addEventCache(url, event)
                                         }
                                         _eventCache.sortByDescending { it.event.createdAt }
                                     }
@@ -368,14 +368,14 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             _mutexRelay.withLock {
                 for (relay in _relayList) {
                     if (relay.isConnected() && relay.readable()) {
-                        val last = _eventCache.lastOrNull { filter.cond(it.event) && it.from.contains(relay.url()) && !it.isOneShot }
+                        val last = _eventCache.lastOrNull { filter.cond(it.event) && it.from.contains(relay.url())}
                         val until = last?.event?.createdAt ?: 0
                         relay.sendOneShot(filter.copy(limit = fetchSizeFlow.value, until = until),
                             onReceive = { url, eventList ->
                                 viewModelScope.launch {
                                     _mutexCache.withLock {
                                         for (event in eventList) {
-                                            addEventCache(url, event, false)
+                                            addEventCache(url, event)
                                         }
                                         _eventCache.sortByDescending { it.event.createdAt }
                                     }
@@ -500,7 +500,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                             viewModelScope.launch {
                                                 _mutexCache.withLock {
                                                     for (event in eventList) {
-                                                        addEventCache(url, event, false)
+                                                        addEventCache(url, event)
                                                     }
                                                     _eventCache.sortByDescending { it.event.createdAt }
                                                 }
@@ -546,7 +546,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                                 viewModelScope.launch {
                                     _mutexCache.withLock {
                                         for (event in eventList) {
-                                            addEventCache(url, event, true)
+                                            addEventCache(url, event)
                                         }
                                         _eventCache.sortByDescending { it.event.createdAt }
                                     }

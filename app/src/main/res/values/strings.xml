@@ -90,6 +90,9 @@
     <string name="copied">copied: %s</string>
     <string name="event_not_found">Event not found</string>
     <string name="copy_content">copy content</string>
+    <string name="delete">delete</string>
+    <string name="description_delete">delete post: %s</string>
+    <string name="deleted">deleted: %s</string>
     <string name="license" translatable="false">"
         TreeGrove / MIT License
         https://github.com/Tatakinov/TreeGrove

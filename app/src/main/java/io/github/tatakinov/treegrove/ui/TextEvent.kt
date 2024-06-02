@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Repeat
@@ -498,15 +499,15 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                 })
             }
             if (priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
-                var expandedConfirmDialog by remember { mutableStateOf(false) }
+                var expandedRepostDialog by remember { mutableStateOf(false) }
                 DropdownMenuItem(text = {
                     Text(stringResource(id = R.string.repost))
                 }, leadingIcon = {
                     Icon(Icons.Default.Repeat, "repost")
                 }, onClick = {
-                    expandedConfirmDialog = true
+                    expandedRepostDialog = true
                 })
-                if (expandedConfirmDialog) {
+                if (expandedRepostDialog) {
                     AlertDialog(
                         title = {
                             Text(stringResource(id = R.string.confirm_title))
@@ -516,12 +517,12 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                         },
                         onDismissRequest = {
                             expanded = false
-                            expandedConfirmDialog = false
+                            expandedRepostDialog = false
                         },
                         dismissButton = {
                             TextButton(onClick = {
                                 expanded = false
-                                expandedConfirmDialog = false
+                                expandedRepostDialog = false
                             }) {
                                 Text(stringResource(id = R.string.cancel))
                             }
@@ -529,7 +530,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                         confirmButton = {
                             TextButton(onClick = {
                                 expanded = false
-                                expandedConfirmDialog = false
+                                expandedRepostDialog = false
                                 coroutineScope.launch {
                                     Misc.repost(
                                         viewModel = viewModel,
@@ -554,6 +555,52 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                                 Text(stringResource(id = R.string.ok))
                             }
                         })
+                }
+                if (event.pubkey == pub.id) {
+                    var expandedDeleteDialog by remember { mutableStateOf(false) }
+                    DropdownMenuItem(leadingIcon = {
+                        Icon(Icons.Default.Delete, "delete")
+                    }, text = {
+                        Text(stringResource(id = R.string.delete))
+                    }, onClick = {
+                        expandedDeleteDialog = true
+                    })
+                    if (expandedDeleteDialog) {
+                        AlertDialog(title = {
+                            Text(stringResource(id = R.string.confirm_title))
+                        }, text = {
+                            Text(stringResource(id = R.string.description_delete, event.content))
+                        }, onDismissRequest = {
+                            expandedDeleteDialog = false
+                        }, dismissButton = {
+                            TextButton(onClick = {
+                                expandedDeleteDialog = false
+                            }) {
+                                Text(stringResource(id = R.string.cancel))
+                            }
+                        }, confirmButton = {
+                            TextButton(onClick = {
+                                expandedDeleteDialog = false
+                                val kind = Kind.EventDeletion.num
+                                val content = ""
+                                val tags = listOf(listOf("e", event.id))
+                                Misc.post(viewModel, kind, content, tags, priv, pub, onSuccess = {}, onFailure = { url, reason ->
+                                    coroutineScope.launch {
+                                        Toast.makeText(
+                                            context,
+                                            context.getString(
+                                                R.string.error_failed_to_post,
+                                                reason
+                                            ),
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                })
+                            }) {
+                                Text(stringResource(id = R.string.ok))
+                            }
+                        })
+                    }
                 }
             }
             if (onAddScreen != null) {

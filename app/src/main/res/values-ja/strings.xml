@@ -77,4 +77,7 @@
     <string name="copied">クリップボードにコピーしました: %s</string>
     <string name="event_not_found">イベントを取得できませんでした</string>
     <string name="copy_content">内容をコピー</string>
+    <string name="delete">削除</string>
+    <string name="description_delete">以下の投稿を削除します: %s</string>
+    <string name="deleted">削除済み: %s</string>
 </resources>
