@@ -1,6 +1,5 @@
 package io.github.tatakinov.treegrove
 
-import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -29,7 +28,8 @@ import kotlinx.coroutines.withContext
 import okhttp3.Response
 import org.json.JSONException
 import org.json.JSONObject
-import java.lang.ref.WeakReference
+
+data class StreamData(val referenceCount: Int, val since: Long, val untilMap: MutableMap<String, Long>, val flow: MutableStateFlow<List<Event>>)
 
 class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesRepository): ViewModel() {
     private val _mutexRelay = Mutex()
@@ -40,7 +40,7 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
     private val _dataCache = mutableMapOf<String, MutableStateFlow<LoadingData<ByteArray>>>()
     private val _eventHashCache = hashSetOf<Event>()
     private val _eventCache = mutableListOf<EventInfo>()
-    private val _streamEventMap = hashMapOf<Filter, Pair<Int, MutableStateFlow<List<Event>>>>()
+    private val _streamEventMap = hashMapOf<Filter, StreamData>()
     private val _replaceableEventMap = mutableMapOf<Filter, Pair<MutableSet<String>, MutableStateFlow<LoadingData<ReplaceableEvent>>>>()
     private val _oneShotEventMap = mutableMapOf<Filter, Pair<MutableSet<String>, MutableStateFlow<List<Event>>>>()
     private var fetchSize: Long = 0
@@ -102,9 +102,10 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             oneShotKeySet.addAll(_oneShotEventMap.keys)
         }
         for (k in streamKeySet) {
-            _streamEventMap[k]?.let { (_, flow) ->
+            _streamEventMap[k]?.let { (_, _, map, flow) ->
+                val f = k.copy(since = map.values.minByOrNull { it } ?: 0)
                 val l = _mutexCache.withLock {
-                    return@withLock _eventCache.filter { k.cond(it.event) }.map { it.event }
+                    return@withLock _eventCache.filter { f.cond(it.event) }.map { it.event }
                 }
                 if (flow.value.size < l.size) {
                     flow.update { l }
@@ -128,6 +129,9 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                         }
                     } else if (value.data.createdAt < r.createdAt) {
                         flow.update { LoadingData.Valid(r) }
+                        if (r is ReplaceableEvent.MetaData && r.nip05.domain.isNotEmpty()) {
+                            fetchNIP05(flow, r.nip05.domain, e.pubkey)
+                        }
                     }
                 }
             }
@@ -264,56 +268,108 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
         viewModelScope.launch {
             _mutexRelay.withLock {
                 for (relay in _relayList) {
-                    relay.sendStream(_streamEventMap.filter { (k, v) -> v.first > 0 }.keys.mapTo(mutableSetOf()) { it.copy(limit = 0) })
+                    relay.sendStream(_streamEventMap.filter { (k, v) -> v.referenceCount > 0 }.keys.mapTo(mutableSetOf()) { it.copy(limit = 0) })
                 }
             }
         }
     }
 
     fun subscribeStreamEvent(filter: Filter): StateFlow<List<Event>> {
-        return runBlocking {
+        runBlocking {
             _mutexFlow.withLock {
                 val v = _streamEventMap[filter]
                 if (v != null) {
-                    _streamEventMap[filter] = v.copy(first = v.first + 1)
-                }
-                else {
-                    _streamEventMap[filter] = Pair(1, MutableStateFlow(listOf()))
+                    _streamEventMap[filter] = v.copy(referenceCount = v.referenceCount + 1)
+                } else {
+                    _streamEventMap[filter] = StreamData(
+                        referenceCount = 1,
+                        since = Misc.now(),
+                        untilMap = mutableMapOf(),
+                        flow = MutableStateFlow(listOf())
+                    )
                 }
             }
-            sendStream()
-            return@runBlocking _streamEventMap[filter]!!.second
         }
+        sendStream()
+        if (_streamEventMap[filter]!!.referenceCount == 1) {
+            viewModelScope.launch {
+                _mutexRelay.withLock {
+                    for (relay in _relayList) {
+                        //　ここだけfetchSizeを無視して取得している。
+                        relay.sendOneShot(
+                            filter.copy(
+                                since = _streamEventMap[filter]!!.since,
+                                until = Misc.now()
+                            ), onReceive = { url, eventList ->
+                                viewModelScope.launch {
+                                    _mutexCache.withLock {
+                                        for (event in eventList) {
+                                            addEventCache(url, event, false)
+                                        }
+                                        _eventCache.sortByDescending { it.event.createdAt }
+                                    }
+                                    updateEventCache()
+                                }
+                            })
+                    }
+                }
+            }
+        }
+        return _streamEventMap[filter]!!.flow
     }
 
     fun unsubscribeStreamEvent(filter: Filter) {
         viewModelScope.launch {
             _mutexFlow.withLock {
                 _streamEventMap[filter]?.let {
-                    if (it.first > 0) {
-                        _streamEventMap[filter] = it.copy(first = it.first - 1)
+                    if (it.referenceCount > 0) {
+                        _streamEventMap[filter] = it.copy(referenceCount = it.referenceCount - 1, since = Misc.now())
                         // TODO since
-                        sendStream()
+                        if (it.referenceCount - 1 == 0) {
+                            sendStream()
+                        }
                     }
                 }
             }
         }
     }
 
-    fun fetchPastPost(filter: Filter) {
+    fun fetchStreamPastPost(filter: Filter) {
+        if (!_streamEventMap.containsKey(filter)) {
+            return
+        }
         viewModelScope.launch {
             _mutexRelay.withLock {
                 for (relay in _relayList) {
                     if (relay.isConnected() && relay.readable()) {
-                        val list =
-                            _eventCache.filter { filter.cond(it.event) && it.from.contains(relay.url()) && !it.isOneShot }
-                                .map { it.event }
-                        val until = if (list.isNotEmpty()) {
-                            val last = list.last()
-                            last.createdAt
-                        } else {
-                            0
-                        }
+                        val map = _streamEventMap[filter]!!.untilMap
+                        val until = map[relay.url()] ?: 0
+                        relay.sendOneShot(filter.copy(limit = fetchSizeFlow.value, until = until),
+                            onReceive = { url, eventList ->
+                                viewModelScope.launch {
+                                    map[url] = eventList.minByOrNull { it.createdAt }?.createdAt ?: 0
+                                    _mutexCache.withLock {
+                                        for (event in eventList) {
+                                            addEventCache(url, event, false)
+                                        }
+                                        _eventCache.sortByDescending { it.event.createdAt }
+                                    }
+                                    updateEventCache()
+                                }
+                            })
+                    }
+                }
+            }
+        }
+    }
+
+    fun fetchOneShotPastPost(filter: Filter) {
+        viewModelScope.launch {
+            _mutexRelay.withLock {
+                for (relay in _relayList) {
+                    if (relay.isConnected() && relay.readable()) {
+                        val last = _eventCache.lastOrNull { filter.cond(it.event) && it.from.contains(relay.url()) && !it.isOneShot }
+                        val until = last?.event?.createdAt ?: 0
                         relay.sendOneShot(filter.copy(limit = fetchSizeFlow.value, until = until),
                             onReceive = { url, eventList ->
                                 viewModelScope.launch {
@@ -433,15 +489,6 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
             }
             _replaceableEventMap[filter]?.let { (set, flow) ->
                 viewModelScope.launch {
-                    val e = _mutexCache.withLock {
-                        return@withLock _eventCache.firstOrNull { filter.cond(it.event) }?.event
-                    }
-                    val r = e?.let {
-                        ReplaceableEvent.parse(it)
-                    }
-                    if (e != null && r != null && flow.value != r) {
-                        flow.update { LoadingData.Valid(r) }
-                    }
                     _mutexRelay.withLock {
                         for (relay in _relayList) {
                             if (relay.isConnected() && relay.readable() && !set.contains(relay.url())) {
@@ -483,7 +530,14 @@ class TreeGroveViewModel(private val userPreferencesRepository: UserPreferencesR
                 val l = _mutexCache.withLock {
                     return@withLock _eventCache.filter { filter.cond(it.event) }.map { it.event }
                 }
-                flow.update { l }
+                flow.update {
+                    if (it.size < l.size) {
+                        l
+                    }
+                    else {
+                        it
+                    }
+                }
                 _mutexRelay.withLock {
                     for (relay in _relayList) {
                         if (relay.isConnected() && relay.readable() && !set.contains(relay.url())) {

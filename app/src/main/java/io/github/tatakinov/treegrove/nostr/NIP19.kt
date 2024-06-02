@@ -127,31 +127,17 @@ object NIP19 {
         return list.toByteArray()
     }
 
-    fun toString(event: Event): String {
-        when (event.kind) {
-            Kind.Text.num -> {
-                val data = Hex.decode(event.id)
-                return encode("note", data)
-            }
-            Kind.ChannelCreation.num -> {
-                val map = mutableMapOf(0 to listOf(Hex.decode(event.id)))
-                map[2] = listOf(Hex.decode(event.pubkey))
-                map[3] = listOf(Hex.decode(event.kind.toHexString()))
-                val tlv = toTLV(map)
-                return encode("nevent", tlv)
-            }
-            Kind.ChannelMessage.num -> {
-                val map = mutableMapOf(0 to listOf(Hex.decode(event.id)))
-                map[2] = listOf(Hex.decode(event.pubkey))
-                map[3] = listOf(Hex.decode(event.kind.toHexString()))
-                val tlv = toTLV(map)
-                return encode("nevent", tlv)
-            }
-            else -> {
-                // TODo stub
-                return ""
-            }
-        }
+    fun toNote(event: Event): String {
+        val data = Hex.decode(event.id)
+        return encode("note", data)
+    }
+
+    fun toNevent(event: Event): String {
+        val map = mutableMapOf(0 to listOf(Hex.decode(event.id)))
+        map[2] = listOf(Hex.decode(event.pubkey))
+        map[3] = listOf(Hex.decode(event.kind.toHexString()))
+        val tlv = toTLV(map)
+        return encode("nevent", tlv)
     }
 
     fun encode(hrp: String, data: ByteArray): String {

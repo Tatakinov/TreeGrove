@@ -71,8 +71,12 @@ fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> 
         }
         if (expandFolloweeList) {
             items(items = followeeListEvent, key = { "followee@${it.key}" }) {
+                HorizontalDivider()
                 Follow(viewModel, it.key, onAddScreen = onAddScreen)
             }
+        }
+        item {
+            HorizontalDivider()
         }
         item {
             TextButton(onClick = { expandFollowerList = !expandFollowerList }, modifier = Modifier.fillMaxWidth()) {
@@ -81,7 +85,14 @@ fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> 
         }
         if (expandFollowerList) {
             items(items = followerListEvent, key = { "follower@${it.pubkey}" }) {
+                HorizontalDivider()
                 Follow(viewModel = viewModel, it.pubkey, onAddScreen = onAddScreen)
+            }
+            item {
+                HorizontalDivider()
+            }
+            item {
+                LoadMoreEventsButton(viewModel = viewModel, filter = followerFilter)
             }
         }
         itemsIndexed(items = eventList, key = { index, event ->
@@ -97,7 +108,7 @@ fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> 
     }
     DisposableEffect(id) {
         if (eventList.isEmpty()) {
-            viewModel.fetchPastPost(eventFilter)
+            viewModel.fetchStreamPastPost(eventFilter)
         }
         onDispose {
             viewModel.unsubscribeStreamEvent(eventFilter)

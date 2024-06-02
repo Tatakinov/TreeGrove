@@ -10,7 +10,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -60,6 +65,7 @@ import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 
 
 @Composable
@@ -73,7 +79,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
     val channelMap = remember { mutableStateMapOf<String, String>() }
     val uriHandler = LocalUriHandler.current
     val date = Date(event.createdAt * 1000)
-    val format = SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+    val format = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
     val d   = format.format(date)
     var expanded by remember { mutableStateOf(false) }
     var i = 0
@@ -487,12 +493,16 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                     onNavigate(event)
                 }, text = {
                     Text(stringResource(id = R.string.reply))
+                }, leadingIcon = {
+                    Icon(Icons.AutoMirrored.Default.Reply, "reply")
                 })
             }
             if (priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
                 var expandedConfirmDialog by remember { mutableStateOf(false) }
                 DropdownMenuItem(text = {
                     Text(stringResource(id = R.string.repost))
+                }, leadingIcon = {
+                    Icon(Icons.Default.Repeat, "repost")
                 }, onClick = {
                     expandedConfirmDialog = true
                 })
@@ -552,35 +562,81 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                     onAddScreen(Screen.Timeline(id = event.pubkey))
                 }, text = {
                     Text(stringResource(id = R.string.view_profile))
+                }, leadingIcon = {
+                    Icon(Icons.Default.Person, "profile")
                 })
                 DropdownMenuItem(onClick = {
                     onAddScreen(Screen.EventDetail(id = event.id, pubkey = event.pubkey))
                 }, text = {
                     Text(stringResource(id = R.string.detail))
+                }, leadingIcon = {
+                    Icon(Icons.Default.Info, "detail")
                 })
             }
-            DropdownMenuItem(onClick = {
+            DropdownMenuItem(text = {
+                Text(stringResource(id = R.string.copy_note))
+            }, leadingIcon = {
+                Icon(Icons.Default.ContentCopy, "copy note")
+            }, onClick = {
                 expanded = false
                 val prefix = "nostr:"
-                val nip19 = NIP19.toString(event)
-                if (nip19.isNotEmpty()) {
+                val note = NIP19.toNote(event)
+                if (note.isNotEmpty()) {
                     clipboard.setText(
                         annotatedString = AnnotatedString(
-                            prefix + NIP19.toString(
-                                event
-                            )
+                            prefix + note
                         )
                     )
                     coroutineScope.launch {
                         Toast.makeText(
                             context,
-                            context.getString(R.string.copied_nevent, prefix + nip19),
+                            context.getString(R.string.copied, prefix + note),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            })
+            DropdownMenuItem(onClick = {
+                expanded = false
+                val prefix = "nostr:"
+                val nevent = NIP19.toNevent(event)
+                if (nevent.isNotEmpty()) {
+                    clipboard.setText(
+                        annotatedString = AnnotatedString(
+                            prefix + nevent
+                        )
+                    )
+                    coroutineScope.launch {
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.copied, prefix + nevent),
                             Toast.LENGTH_SHORT
                         ).show()
                     }
                 }
             }, text = {
                 Text(stringResource(id = R.string.copy_nevent))
+            }, leadingIcon = {
+                Icon(Icons.Default.ContentCopy, "copy nevent")
+            })
+            DropdownMenuItem(onClick = {
+                expanded = false
+                clipboard.setText(
+                    annotatedString = AnnotatedString(
+                        event.content
+                    )
+                )
+                coroutineScope.launch {
+                    Toast.makeText(
+                        context,
+                        context.getString(R.string.copied, event.content),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }, text = {
+                Text(stringResource(id = R.string.copy_content))
+            }, leadingIcon = {
+                Icon(Icons.Default.ContentCopy, "copy content")
             })
         }
     }

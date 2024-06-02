@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -70,6 +71,7 @@ fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigat
             text = it
         }, modifier = Modifier.fillMaxWidth())
         Row {
+            Icon(Icons.Default.Warning, "content warning")
             Text(text = stringResource(id = R.string.content_warning))
             Checkbox(checked = isContentWarning, onCheckedChange = {
                 isContentWarning = it

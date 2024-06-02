@@ -4,8 +4,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
@@ -24,15 +26,16 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
         val parentIDList = event.tags.filter {
             it.size >= 2 && it[0] == "e"
         }.map { it[1] }.distinctBy { it }
+        val childFilter = Filter(
+            kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num),
+            tags = mapOf("e" to listOf(event.id))
+        )
+        val childEventFlow = remember { viewModel.subscribeStreamEvent(childFilter) }
+        val childEventList by childEventFlow.collectAsState()
         if (parentIDList.isNotEmpty()) {
             val parentFilter =
                 Filter(ids = parentIDList, kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num))
             val parentEventList by viewModel.subscribeOneShotEvent(parentFilter).collectAsState()
-            val childFilter = Filter(
-                kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num),
-                tags = mapOf("e" to listOf(event.id))
-            )
-            val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
             LazyColumn(state = listState) {
                 items(items = parentEventList.sortedBy { it.createdAt },
                     key = { it.toJSONObject().toString() }) {
@@ -57,11 +60,6 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
             }
         }
         else {
-            val childFilter = Filter(
-                kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num),
-                tags = mapOf("e" to listOf(event.id))
-            )
-            val childEventList by viewModel.subscribeOneShotEvent(childFilter).collectAsState()
             LazyColumn(state = listState) {
                 item {
                     EventContainer(
@@ -79,6 +77,14 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
                     key = { it.toJSONObject().toString() }) {
                     EventContainer(viewModel, it, onNavigate, onAddScreen, onNavigateImage, false)
                 }
+            }
+        }
+        DisposableEffect(event.id) {
+            if (childEventList.isEmpty()) {
+                viewModel.fetchStreamPastPost(childFilter)
+            }
+            onDispose {
+                viewModel.unsubscribeStreamEvent(childFilter)
             }
         }
     }

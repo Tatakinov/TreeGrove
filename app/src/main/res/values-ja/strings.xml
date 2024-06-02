@@ -67,11 +67,14 @@
     <string name="not_loading">未ローディング</string>
     <string name="error_invalid_data">無効なデータ: %s</string>
     <string name="detail">詳細</string>
-    <string name="copy_nevent">イベントをコピー</string>
-    <string name="copied_nevent">イベントをコピーしました: %s</string>
+    <string name="copy_nevent">nevent形式でコピー</string>
     <string name="repost">リポスト</string>
     <string name="confirm_repost">リポストしますか？</string>
     <string name="notification">通知</string>
     <string name="show_content_warning">センシティブな内容を含んでいる可能性があります: %s</string>
     <string name="reason">理由</string>
+    <string name="copy_note">note形式でコピー</string>
+    <string name="copied">クリップボードにコピーしました: %s</string>
+    <string name="event_not_found">イベントを取得できませんでした</string>
+    <string name="copy_content">内容をコピー</string>
 </resources>

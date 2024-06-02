@@ -2,8 +2,11 @@ package io.github.tatakinov.treegrove.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +25,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwipeRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -50,6 +54,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -474,112 +479,127 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
             }
         }
     }) {
-        BackHandler(tabList.isNotEmpty()) {
-            tabList.removeAt(pagerState.currentPage)
-        }
-        Scaffold(floatingActionButton = {
-            if (tabList.isNotEmpty()) {
-                FloatingActionButton(onClick = {
-                    onNavigatePost(tabList[pagerState.currentPage], null)
-                }) {
-                    Icon(Icons.Default.Create, "post")
-                }
+        if (tabList.isNotEmpty()) {
+            BackHandler(true) {
+                tabList.removeAt(pagerState.currentPage)
             }
-        }, bottomBar = {
-            if (tabList.isNotEmpty()) {
-                val scrollState = rememberScrollState()
-                val selectedTabIndex by remember { derivedStateOf { pagerState.currentPage } }
-                PrimaryScrollableTabRow(selectedTabIndex = selectedTabIndex, scrollState = scrollState, modifier = Modifier.fillMaxWidth()) {
-                    tabList.forEachIndexed { index, screen ->
-                        Tab(selected = selectedTabIndex == index,
-                            onClick = {
+            Scaffold(floatingActionButton = {
+                if (tabList.isNotEmpty()) {
+                    FloatingActionButton(onClick = {
+                        onNavigatePost(tabList[pagerState.currentPage], null)
+                    }) {
+                        Icon(Icons.Default.Create, "post")
+                    }
+                }
+            }, bottomBar = {
+                if (tabList.isNotEmpty()) {
+                    val scrollState = rememberScrollState()
+                    val selectedTabIndex by remember { derivedStateOf { pagerState.currentPage } }
+                    PrimaryScrollableTabRow(
+                        selectedTabIndex = selectedTabIndex,
+                        scrollState = scrollState,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        tabList.forEachIndexed { index, screen ->
+                            Tab(selected = selectedTabIndex == index,
+                                onClick = {
+                                    coroutineScope.launch {
+                                        pagerState.scrollToPage(index)
+                                    }
+                                },
+                                icon = {
+                                    Icon(screen.icon, "Tab Icon")
+                                })
+                        }
+                    }
+                }
+            }) { padding ->
+                Column {
+                    HorizontalPager(
+                        state = pagerState, modifier = Modifier
+                            .padding(padding)
+                            .weight(1f), userScrollEnabled = false
+                    ) { index ->
+                        val onAddScreen: (Screen) -> Unit = { screen ->
+                            val pos = tabList.indexOf(screen)
+                            if (pos == -1) {
+                                tabList.add(screen)
                                 coroutineScope.launch {
-                                    pagerState.scrollToPage(index)
+                                    pagerState.scrollToPage(tabList.size - 1)
                                 }
-                            },
-                            icon = {
-                                Icon(screen.icon, "Tab Icon")
-                            })
+                            } else {
+                                coroutineScope.launch {
+                                    pagerState.scrollToPage(pos)
+                                }
+                            }
+                        }
+                        when (val screen = tabList[index]) {
+                            is Screen.OwnTimeline -> {
+                                OwnTimeline(viewModel, screen.id, onNavigate = {
+                                    onNavigatePost(screen, it)
+                                }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                            }
+
+                            is Screen.Timeline -> {
+                                Timeline(viewModel, screen.id, onNavigate = {
+                                    onNavigatePost(screen, it)
+                                }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                            }
+
+                            is Screen.Channel -> {
+                                Channel(viewModel, screen.id, screen.pubkey, onNavigate = {
+                                    onNavigatePost(screen, it)
+                                }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                            }
+
+                            is Screen.EventDetail -> {
+                                EventDetail(
+                                    viewModel = viewModel,
+                                    id = screen.id,
+                                    pubkey = screen.pubkey,
+                                    onNavigate = {
+                                        onNavigatePost(screen, it)
+                                    },
+                                    onAddScreen = onAddScreen,
+                                    onNavigateImage = onNavigateImage
+                                )
+                            }
+
+                            is Screen.ChannelEventDetail -> {
+                                ChannelEventDetail(
+                                    viewModel = viewModel,
+                                    id = screen.id,
+                                    pubkey = screen.pubkey,
+                                    channelID = screen.channelID,
+                                    onNavigate = {
+                                        onNavigatePost(screen, it)
+                                    },
+                                    onAddScreen = onAddScreen,
+                                    onNavigateImage = onNavigateImage
+                                )
+                            }
+
+                            is Screen.Notification -> {
+                                Notification(viewModel = viewModel, onNavigate = {
+                                    onNavigatePost(screen, it)
+                                }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                            }
+                        }
                     }
                 }
             }
-        }) { padding ->
-            Column {
-                HorizontalPager(
-                    state = pagerState, modifier = Modifier
-                        .padding(padding)
-                        .weight(1f), userScrollEnabled = false
-                ) { index ->
-                    val onAddScreen: (Screen) -> Unit = { screen ->
-                        val pos = tabList.indexOf(screen)
-                        if (pos == -1) {
-                            tabList.add(screen)
-                            coroutineScope.launch {
-                                pagerState.scrollToPage(tabList.size - 1)
-                            }
-                        } else {
-                            coroutineScope.launch {
-                                pagerState.scrollToPage(pos)
-                            }
-                        }
-                    }
-                    when (val screen = tabList[index]) {
-                        is Screen.OwnTimeline -> {
-                            OwnTimeline(viewModel, screen.id, onNavigate = {
-                                onNavigatePost(screen, it)
-                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
-                        }
-
-                        is Screen.Timeline -> {
-                            Timeline(viewModel, screen.id, onNavigate = {
-                                onNavigatePost(screen, it)
-                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
-                        }
-
-                        is Screen.Channel -> {
-                            Channel(viewModel, screen.id, screen.pubkey, onNavigate = {
-                                onNavigatePost(screen, it)
-                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
-                        }
-                        is Screen.EventDetail -> {
-                            EventDetail(
-                                viewModel = viewModel,
-                                id = screen.id,
-                                pubkey = screen.pubkey,
-                                onNavigate = {
-                                    onNavigatePost(screen, it)
-                                },
-                                onAddScreen = onAddScreen,
-                                onNavigateImage = onNavigateImage
-                            )
-                        }
-                        is Screen.ChannelEventDetail -> {
-                            ChannelEventDetail(
-                                viewModel = viewModel,
-                                id = screen.id,
-                                pubkey = screen.pubkey,
-                                channelID = screen.channelID,
-                                onNavigate = {
-                                    onNavigatePost(screen, it)
-                                },
-                                onAddScreen = onAddScreen,
-                                onNavigateImage = onNavigateImage
-                            )
-                        }
-                        is Screen.Notification -> {
-                            Notification(viewModel = viewModel, onNavigate = {
-                                onNavigatePost(screen, it)
-                            }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
-                        }
-                    }
-                }
+        }
+        else {
+            Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(Icons.Default.SwipeRight, "swipe to open menu")
+                Text(text = stringResource(id = R.string.description_swipe_to_open_menu))
             }
         }
     }
     LaunchedEffect(relayConfigList) {
         viewModel.setRelayConfigList(relayConfigList)
         if (relayConfigList.isNotEmpty() && channelList.isEmpty()) {
-            viewModel.fetchPastPost(channelFilter)
+            viewModel.fetchStreamPastPost(channelFilter)
         }
     }
     LaunchedEffect(publicKey) {

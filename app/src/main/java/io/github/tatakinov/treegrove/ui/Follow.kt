@@ -14,6 +14,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,10 +69,17 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                 }
         )
         if (priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
-            val contacts by viewModel.subscribeReplaceableEvent(Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))).collectAsState()
-            val c = contacts
-            if (c is LoadingData.Valid && c.data is ReplaceableEvent.Contacts) {
-                if (c.data.list.any { it.key == pubkey }) {
+            val contactsFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))
+            val contactsEventFlow = remember { viewModel.subscribeStreamEvent(contactsFilter) }
+            val contactsEventList by contactsEventFlow.collectAsState()
+            val c = if (contactsEventList.isNotEmpty()) {
+                ReplaceableEvent.parse(contactsEventList.first())
+            }
+            else {
+                null
+            }
+            if (c is ReplaceableEvent.Contacts) {
+                if (c.list.any { it.key == pubkey }) {
                     var expandUnfollowDialog by remember { mutableStateOf(false) }
                     Button(onClick = {
                         expandUnfollowDialog = true
@@ -94,7 +102,8 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                             },
                             confirmButton = {
                                 TextButton(onClick = {
-                                    val list = c.data.list.filter { it.key != pubkey }
+                                    expandUnfollowDialog = false
+                                    val list = c.list.filter { it.key != pubkey }
                                     Misc.postContacts(viewModel, list, priv, pub, onSuccess = {}, onFailure = { url, reason ->
                                         coroutineScope.launch {
                                             Toast.makeText(context, context.getString(R.string.error_failed_to_post, reason), Toast.LENGTH_SHORT).show()
@@ -130,9 +139,10 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                             },
                             confirmButton = {
                                 TextButton(onClick = {
+                                    expandFollowDialog = false
                                     val list =
                                         mutableListOf<ReplaceableEvent.Contacts.Data>().apply {
-                                            addAll(c.data.list)
+                                            addAll(c.list)
                                             add(ReplaceableEvent.Contacts.Data(key = pubkey))
                                         }
                                     Misc.postContacts(viewModel, list, priv, pub, onSuccess = {},
@@ -153,6 +163,11 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                                 }
                             })
                     }
+                }
+            }
+            LaunchedEffect(pub.id) {
+                if (contactsEventList.isEmpty()) {
+                    viewModel.fetchStreamPastPost(contactsFilter)
                 }
             }
         }

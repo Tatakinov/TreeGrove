@@ -61,7 +61,7 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
     }
     DisposableEffect(id) {
         if (eventList.isEmpty()) {
-            viewModel.fetchPastPost(eventFilter)
+            viewModel.fetchStreamPastPost(eventFilter)
         }
         onDispose {
             viewModel.unsubscribeStreamEvent(eventFilter)

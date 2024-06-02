@@ -41,7 +41,7 @@ fun Notification(viewModel: TreeGroveViewModel, onNavigate: (Event?) -> Unit, on
         }
         DisposableEffect(pub.id) {
             if (eventList.isEmpty()) {
-                viewModel.fetchPastPost(filter)
+                viewModel.fetchStreamPastPost(filter)
             }
             onDispose {
                 viewModel.unsubscribeStreamEvent(filter)

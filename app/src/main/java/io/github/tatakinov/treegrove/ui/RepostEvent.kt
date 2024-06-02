@@ -73,6 +73,9 @@ fun RepostEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event
                         isFocused = isFocused
                     )
                 }
+                else {
+                    Text(stringResource(id = R.string.event_not_found), modifier = Modifier.padding(start = 10.dp, end = 10.dp))
+                }
             }
         }
         else {
@@ -91,6 +94,9 @@ fun RepostEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event
                     onNavigateImage = onNavigateImage,
                     isFocused = isFocused
                 )
+            }
+            else {
+                Text(stringResource(id = R.string.event_not_found), modifier = Modifier.padding(start = 10.dp, end = 10.dp))
             }
         }
     }
