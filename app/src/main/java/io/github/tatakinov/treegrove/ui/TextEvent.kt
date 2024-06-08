@@ -61,6 +61,7 @@ import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
+import io.github.tatakinov.treegrove.nostr.NIP05
 import io.github.tatakinov.treegrove.nostr.NIP19
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
 import kotlinx.coroutines.launch
@@ -78,10 +79,11 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
     val userMetaDataMap = remember { mutableStateMapOf<String, State<LoadingData<ReplaceableEvent>>>() }
     val pubkeyMap = remember { mutableStateMapOf<String ,String>() }
     val channelMap = remember { mutableStateMapOf<String, String>() }
+    val kindMap = remember { mutableStateMapOf<String, Int>() }
     val uriHandler = LocalUriHandler.current
-    val date = Date(event.createdAt * 1000)
+    val d = Date(event.createdAt * 1000)
     val format = SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.US)
-    val d   = format.format(date)
+    val date   = format.format(d)
     var expanded by remember { mutableStateOf(false) }
     var i = 0
     while (i < event.content.length) {
@@ -108,30 +110,38 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
             }
         }
         else if (noteMatch != null) {
-            val e = NIP19.parse(noteMatch.value.substring(6))
-            if (e is NIP19.Data.Note) {
-                val f = Filter(ids = listOf(e.id))
+            val ev = NIP19.parse(noteMatch.value.substring(6))
+            if (ev is NIP19.Data.Note) {
+                val f = Filter(ids = listOf(ev.id))
                 val eventList by viewModel.subscribeOneShotEvent(f).collectAsState()
                 if (eventList.isNotEmpty()) {
-                    val ev = eventList.first()
-                    if (ev.kind == Kind.Text.num) {
-                        pubkeyMap[e.id] = ev.pubkey
-                    }
-                    else if (ev.kind == Kind.ChannelMessage.num) {
-                        val ids = if (event.tags.any { it.size >= 4 && it[0] == "e" && it[3] == "root" }) {
-                            listOf(event.tags.filter { it.size >= 4 && it[0] == "e" && it[3] == "root" }.map { it[1] }.first())
+                    val e = eventList.first()
+                    when (e.kind) {
+                        Kind.Text.num -> {
+                            pubkeyMap[ev.id] = e.pubkey
+                            kindMap[ev.id] = e.kind
                         }
-                        else {
-                            event.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                        Kind.ChannelCreation.num -> {
+                            pubkeyMap[ev.id] = e.pubkey
+                            kindMap[ev.id] = e.kind
                         }
-                        if (ids.isNotEmpty()) {
-                            val channelFilter =
-                                Filter(ids = ids, kinds = listOf(Kind.ChannelCreation.num))
-                            val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
-                                .collectAsState()
-                            if (channelEvent.isNotEmpty()) {
-                                pubkeyMap[e.id] = ev.pubkey
-                                channelMap[e.id] = channelEvent.first().id
+                        Kind.ChannelMessage.num -> {
+                            val ids = if (event.tags.any { it.size >= 4 && it[0] == "e" && it[3] == "root" }) {
+                                listOf(event.tags.filter { it.size >= 4 && it[0] == "e" && it[3] == "root" }.map { it[1] }.first())
+                            }
+                            else {
+                                event.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                            }
+                            if (ids.isNotEmpty()) {
+                                val channelFilter =
+                                    Filter(ids = ids, kinds = listOf(Kind.ChannelCreation.num))
+                                val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
+                                    .collectAsState()
+                                if (channelEvent.isNotEmpty()) {
+                                    pubkeyMap[ev.id] = e.pubkey
+                                    channelMap[ev.id] = channelEvent.first().id
+                                    kindMap[ev.id] = e.kind
+                                }
                             }
                         }
                     }
@@ -143,17 +153,17 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
             }
         }
         else if (neventMatch != null) {
-            val e = NIP19.parse(neventMatch.value.substring(6))
-            if (e is NIP19.Data.Event) {
-                val ids = listOf(e.id)
-                val kinds = if (e.kind != null) {
-                    listOf(e.kind)
+            val ev = NIP19.parse(neventMatch.value.substring(6))
+            if (ev is NIP19.Data.Event) {
+                val ids = listOf(ev.id)
+                val kinds = if (ev.kind != null) {
+                    listOf(ev.kind)
                 }
                 else {
                     listOf()
                 }
-                val authors = if (e.author != null) {
-                    listOf(e.author)
+                val authors = if (ev.author != null) {
+                    listOf(ev.author)
                 }
                 else {
                     listOf()
@@ -161,27 +171,35 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                 val f = Filter(ids = ids, kinds = kinds, authors = authors)
                 val eventList by viewModel.subscribeOneShotEvent(f).collectAsState()
                 if (eventList.isNotEmpty()) {
-                    val ev = eventList.first()
-                    if (ev.kind == Kind.ChannelMessage.num) {
-                        val channelIDs = if (event.tags.any { it.size >= 4 && it[0] == "e" && it[3] == "root" }) {
-                            listOf(event.tags.filter { it.size >= 4 && it[0] == "e" && it[3] == "root" }.map { it[1] }.first())
+                    val e = eventList.first()
+                    when (e.kind) {
+                        Kind.Text.num -> {
+                            pubkeyMap[ev.id] = e.pubkey
+                            kindMap[ev.id] = e.kind
                         }
-                        else {
-                            event.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                        Kind.ChannelCreation.num -> {
+                            pubkeyMap[ev.id] = e.pubkey
+                            kindMap[ev.id] = e.kind
                         }
-                        if (channelIDs.isNotEmpty()) {
-                            val channelFilter =
-                                Filter(ids = channelIDs, kinds = listOf(Kind.ChannelCreation.num))
-                            val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
-                                .collectAsState()
-                            if (channelEvent.isNotEmpty()) {
-                                pubkeyMap[e.id] = ev.pubkey
-                                channelMap[e.id] = channelEvent.first().id
+                        Kind.ChannelMessage.num -> {
+                            val ids = if (event.tags.any { it.size >= 4 && it[0] == "e" && it[3] == "root" }) {
+                                listOf(event.tags.filter { it.size >= 4 && it[0] == "e" && it[3] == "root" }.map { it[1] }.first())
+                            }
+                            else {
+                                event.tags.filter { it.size >= 2 && it[0] == "e" }.map { it[1] }
+                            }
+                            if (ids.isNotEmpty()) {
+                                val channelFilter =
+                                    Filter(ids = ids, kinds = listOf(Kind.ChannelCreation.num))
+                                val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
+                                    .collectAsState()
+                                if (channelEvent.isNotEmpty()) {
+                                    pubkeyMap[ev.id] = e.pubkey
+                                    channelMap[ev.id] = channelEvent.first().id
+                                    kindMap[ev.id] = e.kind
+                                }
                             }
                         }
-                    }
-                    else {
-                        pubkeyMap[e.id] = ev.pubkey
                     }
                 }
                 i = pos + neventMatch.value.length
@@ -202,6 +220,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                     val pub = NIP19.parse(bech32)
                     if (pub is NIP19.Data.Pub && userMetaDataMap.containsKey(pub.id)) {
                         val e = userMetaDataMap[pub.id]?.value
+                        pushStringAnnotation(tag = "nevent", annotation = value)
                         if (e != null && e is LoadingData.Valid && e.data is ReplaceableEvent.MetaData) {
                             withStyle(style = SpanStyle(color = Color.Cyan)) {
                                 append(e.data.name)
@@ -212,6 +231,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                                 append(bech32)
                             }
                         }
+                        pop()
                         return@label true
                     }
                     return@label false
@@ -359,12 +379,22 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                 となるので一時的にLtrに戻す
                  */
                         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                            Text(d, fontSize = 12.sp, maxLines = 1)
+                            Text(date, fontSize = 12.sp, maxLines = 1)
                         }
                         Spacer(modifier = Modifier.weight(1f))
                         if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData &&
                             m.data.nip05.identify is LoadingData.Valid && m.data.nip05.identify.data
                         ) {
+                            NIP05.ADDRESS_REGEX.find(m.data.nip05.domain)?.let {
+                                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                    Text(
+                                        it.groups[2]!!.value,
+                                        fontSize = 12.sp,
+                                        overflow = TextOverflow.Ellipsis,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
                             Icon(
                                 Icons.Default.CheckCircle,
                                 "verified",
@@ -433,43 +463,38 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                                 var screen: Screen? = null
                                 when (data) {
                                     is NIP19.Data.Note -> {
-                                        screen =
-                                            Screen.EventDetail(
-                                                data.id,
-                                                pubkey = pubkeyMap[data.id]!!
-                                            )
+                                        when (kindMap[data.id]) {
+                                            Kind.Text.num -> {
+                                                screen = Screen.EventDetail(id = data.id, pubkey = pubkeyMap[data.id]!!)
+                                            }
+                                            Kind.ChannelCreation.num -> {
+                                                screen = Screen.Channel(id = data.id, pubkey = pubkeyMap[data.id]!!)
+                                            }
+                                            Kind.ChannelMessage.num -> {
+                                                screen = Screen.ChannelEventDetail(id = data.id, pubkey = pubkeyMap[data.id]!!, channelID = channelMap[data.id]!!)
+                                            }
+                                        }
                                     }
 
                                     is NIP19.Data.Event -> {
-                                        when (data.kind) {
+                                        when (kindMap[data.id]) {
                                             Kind.Text.num -> {
-                                                screen = Screen.EventDetail(
-                                                    data.id,
-                                                    pubkey = pubkeyMap[data.id]!!
-                                                )
+                                                screen = Screen.EventDetail(id = data.id, pubkey = pubkeyMap[data.id]!!)
                                             }
-
                                             Kind.ChannelCreation.num -> {
-                                                if (data.author != null) {
-                                                    screen = Screen.Channel(
-                                                        id = data.id,
-                                                        pubkey = data.author
-                                                    )
-                                                }
+                                                screen = Screen.Channel(id = data.id, pubkey = pubkeyMap[data.id]!!)
                                             }
-
                                             Kind.ChannelMessage.num -> {
-                                                screen = Screen.ChannelEventDetail(
-                                                    id = data.id, pubkey = pubkeyMap[data.id]!!,
-                                                    channelID = channelMap[data.id]!!
-                                                )
+                                                screen = Screen.ChannelEventDetail(id = data.id, pubkey = pubkeyMap[data.id]!!, channelID = channelMap[data.id]!!)
                                             }
-
-                                            else -> {}
                                         }
                                     }
 
                                     is NIP19.Data.Profile -> {
+                                        screen = Screen.Timeline(id = data.id)
+                                    }
+
+                                    is NIP19.Data.Pub -> {
                                         screen = Screen.Timeline(id = data.id)
                                     }
 

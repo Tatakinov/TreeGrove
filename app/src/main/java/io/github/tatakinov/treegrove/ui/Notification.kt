@@ -2,9 +2,11 @@ package io.github.tatakinov.treegrove.ui
 
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -25,7 +27,7 @@ fun Notification(viewModel: TreeGroveViewModel, onNavigate: (Event?) -> Unit, on
         val eventList by eventListFlow.collectAsState()
         val listState = rememberLazyListState()
         LazyColumn(state = listState) {
-            items (items = eventList, key = { it.toJSONObject().toString() }) { event ->
+            itemsIndexed (items = eventList, key = { _, e -> e.toJSONObject().toString() }) { index, event ->
                 EventContainer(
                     viewModel = viewModel,
                     event = event,
@@ -34,15 +36,15 @@ fun Notification(viewModel: TreeGroveViewModel, onNavigate: (Event?) -> Unit, on
                     onNavigateImage = onNavigateImage,
                     isFocused = false
                 )
+                LaunchedEffect(Unit) {
+                    viewModel.fetchStreamPastPost(filter, index)
+                }
             }
             item {
                 LoadMoreEventsButton(viewModel = viewModel, filter = filter)
             }
         }
         DisposableEffect(pub.id) {
-            if (eventList.isEmpty()) {
-                viewModel.fetchStreamPastPost(filter)
-            }
             onDispose {
                 viewModel.unsubscribeStreamEvent(filter)
             }

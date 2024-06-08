@@ -31,12 +31,12 @@ import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
 
 @Composable
 fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
+    val listState = rememberLazyListState()
     val eventFilter = Filter(kinds = listOf(Kind.Text.num, Kind.Repost.num, Kind.GenericRepost.num, Kind.ChannelMessage.num), authors = listOf(id))
     val eventListFlow = remember { viewModel.subscribeStreamEvent(eventFilter) }
     val eventList by eventListFlow.collectAsState()
     val metaDataFilter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(id))
     val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
-    val listState = rememberLazyListState()
     var expandFolloweeList by remember { mutableStateOf(false) }
     val followeeFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(id))
     val followeeEvent by viewModel.subscribeReplaceableEvent(followeeFilter).collectAsState()
@@ -100,6 +100,9 @@ fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> 
         }) { index, event ->
             HorizontalDivider()
             EventContainer(viewModel, event, onNavigate = onNavigate, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage, false)
+            LaunchedEffect(Unit) {
+                viewModel.fetchStreamPastPost(eventFilter, index)
+            }
         }
         item {
             HorizontalDivider()
@@ -107,9 +110,6 @@ fun Timeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> 
         }
     }
     DisposableEffect(id) {
-        if (eventList.isEmpty()) {
-            viewModel.fetchStreamPastPost(eventFilter)
-        }
         onDispose {
             viewModel.unsubscribeStreamEvent(eventFilter)
             viewModel.unsubscribeStreamEvent(followerFilter)

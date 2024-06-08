@@ -52,6 +52,9 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
                     isFocused = false,
                     suppressDetail = true
                 )
+                LaunchedEffect(Unit) {
+                    viewModel.fetchStreamPastPost(eventFilter, index)
+                }
             }
             item {
                 HorizontalDivider()
@@ -60,9 +63,6 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
         }
     }
     DisposableEffect(id) {
-        if (eventList.isEmpty()) {
-            viewModel.fetchStreamPastPost(eventFilter)
-        }
         onDispose {
             viewModel.unsubscribeStreamEvent(eventFilter)
         }

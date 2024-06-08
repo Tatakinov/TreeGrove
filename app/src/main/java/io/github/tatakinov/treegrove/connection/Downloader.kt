@@ -3,6 +3,7 @@ package io.github.tatakinov.treegrove.connection
 import android.util.Log
 import io.github.tatakinov.treegrove.LoadingData
 import okhttp3.Request
+import okio.IOException
 import okio.withLock
 import java.util.concurrent.locks.ReentrantLock
 
@@ -13,16 +14,20 @@ class Downloader(private val onTransmit: (String, Int) -> Unit) {
         val request = Request.Builder().url(url).build()
         onTransmit(url, request.toString().toByteArray().size)
         val client = if (allowRedirect) { HttpClient.default } else { HttpClient.noRedirect }
-        val response = client.newCall(request).execute()
-        onTransmit(url, response.toString().toByteArray().size)
-        val data = response.body?.bytes()
-        val loadingData = if (data != null) {
-            onTransmit(url, data.size)
-            LoadingData.Valid(data)
+        try {
+            val response = client.newCall(request).execute()
+            onTransmit(url, response.toString().toByteArray().size)
+            val data = response.body?.bytes()
+            val loadingData = if (data != null) {
+                onTransmit(url, data.size)
+                LoadingData.Valid(data)
+            } else {
+                LoadingData.Invalid(LoadingData.Reason.NotFound)
+            }
+            onReceive(url, loadingData)
         }
-        else {
-            LoadingData.Invalid(LoadingData.Reason.NotFound)
+        catch (e: IOException) {
+            onReceive(url, LoadingData.Invalid(LoadingData.Reason.IOError))
         }
-        onReceive(url, loadingData)
     }
 }

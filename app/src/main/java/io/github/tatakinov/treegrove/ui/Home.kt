@@ -599,7 +599,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
     LaunchedEffect(relayConfigList) {
         viewModel.setRelayConfigList(relayConfigList)
         if (relayConfigList.isNotEmpty() && channelList.isEmpty()) {
-            viewModel.fetchStreamPastPost(channelFilter)
+            viewModel.fetchStreamPastPost(channelFilter, -1)
         }
     }
     LaunchedEffect(publicKey) {

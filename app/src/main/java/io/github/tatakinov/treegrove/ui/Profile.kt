@@ -219,7 +219,7 @@ fun Profile(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
                         }
                         item {
                             TextButton(onClick = {
-                                viewModel.fetchStreamPastPost(followerFilter)
+                                viewModel.fetchStreamPastPost(followerFilter, -1)
                             }, modifier = Modifier.fillMaxWidth()) {
                                 Text(stringResource(id = R.string.load_more))
                             }

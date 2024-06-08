@@ -8,6 +8,7 @@ sealed class LoadingData<T> {
 
     enum class Reason (reason: String) {
         NotFound("not_found"),
-        ParseError("parse_error")
+        ParseError("parse_error"),
+        IOError("io_error")
     }
 }

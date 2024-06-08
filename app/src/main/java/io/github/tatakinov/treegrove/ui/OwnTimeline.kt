@@ -7,12 +7,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,16 +35,11 @@ import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
 fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
     var expandFolloweeList by remember { mutableStateOf(false) }
     val followeeFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(id))
-    val followeeEventListFlow = remember { viewModel.subscribeStreamEvent(followeeFilter) }
-    val followeeEventList by followeeEventListFlow.collectAsState()
-    val followeeEvent = if (followeeEventList.isNotEmpty()) {
-        ReplaceableEvent.parse(followeeEventList.first())
-    }
-    else {
-        null
-    }
-    val followeeList = if (followeeEvent is ReplaceableEvent.Contacts) {
-        followeeEvent.list
+    val followeeEventListFlow = remember { viewModel.subscribeStreamReplaceableEvent(followeeFilter) }
+    val followeeEvent by followeeEventListFlow.collectAsState()
+    val fe = followeeEvent
+    val followeeList = if (fe is LoadingData.Valid && fe.data is ReplaceableEvent.Contacts) {
+        fe.data.list
     }
     else {
         listOf()
@@ -88,11 +85,14 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
                     LoadMoreEventsButton(viewModel = viewModel, filter = followerFilter)
                 }
             }
-            items(items = eventList, key = { event ->
+            itemsIndexed(items = eventList, key = { _, event ->
                 event.toJSONObject().toString()
-            }) { event ->
+            }) { index, event ->
                 HorizontalDivider()
                 EventContainer(viewModel, event = event, onNavigate = onNavigate, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage, isFocused = false)
+                LaunchedEffect(Unit) {
+                    viewModel.fetchStreamPastPost(eventFilter, index)
+                }
             }
             item {
                 HorizontalDivider()
@@ -102,9 +102,6 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
             }
         }
         DisposableEffect(id) {
-            if (eventList.isEmpty()) {
-                viewModel.fetchStreamPastPost(eventFilter)
-            }
             onDispose {
                 viewModel.unsubscribeStreamEvent(eventFilter)
             }
@@ -116,11 +113,8 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
         }
     }
     DisposableEffect(id) {
-        if (followeeEventList.isEmpty()) {
-            viewModel.fetchStreamPastPost(followeeFilter)
-        }
         onDispose {
-            viewModel.unsubscribeStreamEvent(followerFilter)
+            viewModel.unsubscribeStreamReplaceableEvent(followerFilter)
         }
     }
 }

@@ -70,10 +70,11 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
         )
         if (priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
             val contactsFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))
-            val contactsEventFlow = remember { viewModel.subscribeStreamEvent(contactsFilter) }
+            val contactsEventFlow = remember { viewModel.subscribeStreamReplaceableEvent(contactsFilter) }
             val contactsEventList by contactsEventFlow.collectAsState()
-            val c = if (contactsEventList.isNotEmpty()) {
-                ReplaceableEvent.parse(contactsEventList.first())
+            val e = contactsEventList
+            val c = if (e is LoadingData.Valid) {
+                e.data
             }
             else {
                 null
@@ -163,11 +164,6 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                                 }
                             })
                     }
-                }
-            }
-            LaunchedEffect(pub.id) {
-                if (contactsEventList.isEmpty()) {
-                    viewModel.fetchStreamPastPost(contactsFilter)
                 }
             }
         }
