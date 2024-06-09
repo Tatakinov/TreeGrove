@@ -289,6 +289,9 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                 }
                             })
                         }
+                        item {
+                            LoadMoreEventsButton(viewModel = viewModel, filter = pinnedChannelFilter)
+                        }
                     }
                     item {
                         HorizontalDivider()
@@ -598,9 +601,6 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
     }
     LaunchedEffect(relayConfigList) {
         viewModel.setRelayConfigList(relayConfigList)
-        if (relayConfigList.isNotEmpty() && channelList.isEmpty()) {
-            viewModel.fetchStreamPastPost(channelFilter, -1)
-        }
     }
     LaunchedEffect(publicKey) {
         val pub = NIP19.parse(publicKey)

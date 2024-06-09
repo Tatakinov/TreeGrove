@@ -35,14 +35,10 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
         } else {
             ChannelTitle(viewModel = viewModel, id = id, name = id, about = null)
         }
-        HorizontalDivider()
         LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
-            itemsIndexed(items = eventList, key = { index, event ->
+            itemsIndexed(items = eventList, key = { _, event ->
                 event.toJSONObject().toString()
             }) { index, event ->
-                if (index > 0) {
-                    HorizontalDivider()
-                }
                 EventContainer(
                     viewModel = viewModel,
                     event = event,
@@ -63,6 +59,9 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
         }
     }
     DisposableEffect(id) {
+        if (eventList.isEmpty()) {
+            viewModel.fetchStreamPastPost(eventFilter, -1)
+        }
         onDispose {
             viewModel.unsubscribeStreamEvent(eventFilter)
         }

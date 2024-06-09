@@ -1,13 +1,21 @@
 package io.github.tatakinov.treegrove.ui
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import io.github.tatakinov.treegrove.R
 import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
@@ -71,11 +79,13 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
                         isFocused = true
                     )
                 }
-                val el = childEventList
-                items(
-                    items = el.sortedBy { it.createdAt },
-                    key = { it.toJSONObject().toString() }) {
-                    EventContainer(viewModel, it, onNavigate, onAddScreen, onNavigateImage, false)
+                itemsIndexed(
+                    items = childEventList.sortedBy { it.createdAt },
+                    key = { _, event -> event.toJSONObject().toString() }) { index, event ->
+                    EventContainer(viewModel, event, onNavigate, onAddScreen, onNavigateImage, false)
+                    LaunchedEffect(Unit) {
+                        viewModel.fetchStreamPastPost(childFilter, index)
+                    }
                 }
             }
         }
@@ -87,5 +97,8 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
                 viewModel.unsubscribeStreamEvent(childFilter)
             }
         }
+    }
+    else {
+        Text(stringResource(id = R.string.event_not_found), modifier = Modifier.padding(start = 10.dp, end = 10.dp))
     }
 }

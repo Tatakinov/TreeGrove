@@ -102,6 +102,9 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
             }
         }
         DisposableEffect(id) {
+            if (eventList.isEmpty()) {
+                viewModel.fetchStreamPastPost(eventFilter, -1)
+            }
             onDispose {
                 viewModel.unsubscribeStreamEvent(eventFilter)
             }

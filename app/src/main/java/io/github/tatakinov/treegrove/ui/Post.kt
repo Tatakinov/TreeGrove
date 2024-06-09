@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,7 +40,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Post(viewModel: TreeGroveViewModel, screen: Screen, event: Event?, onNavigate: () -> Unit) {
+fun Post(privateKey: State<String>, publicKey: State<String>, screen: Screen, event: Event?, onNavigate: (Event) -> Unit) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val privateKey by viewModel.privateKeyFlow.collectAsState()
