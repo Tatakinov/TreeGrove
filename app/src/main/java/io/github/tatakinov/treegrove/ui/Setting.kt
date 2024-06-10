@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -41,34 +42,35 @@ import io.github.tatakinov.treegrove.connection.RelayConfig
 import io.github.tatakinov.treegrove.nostr.Keys
 import io.github.tatakinov.treegrove.nostr.NIP19
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 @Composable
-fun Setting(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
+fun Setting(privateKey: String, publicKey: String, relayConfigListState: State<List<RelayConfig>>, fetchSizeState: State<Long>, onNavigate: (UserPreferences) -> Unit) {
     val context = LocalContext.current
     val coroutineScope  = rememberCoroutineScope()
     val state   = rememberLazyListState()
-    val privateKey by viewModel.privateKeyFlow.collectAsState()
     var inputPrivateKey by remember { mutableStateOf(UserPreferencesRepository.Default.privateKey) }
-    val relayList by viewModel.relayConfigListFlow.collectAsState()
     val inputRelayList = remember {
         mutableStateListOf<RelayConfig>().apply {
             addAll(UserPreferencesRepository.Default.relayList)
         }
     }
-    val fetchSize by viewModel.fetchSizeFlow.collectAsState()
     var inputFetchSize by remember {
         mutableStateOf(UserPreferencesRepository.Default.fetchSize.toString())
     }
     LaunchedEffect(privateKey) {
-        inputPrivateKey = privateKey
+        inputPrivateKey = privateKey.ifEmpty { publicKey }
     }
-    LaunchedEffect(relayList) {
+    LaunchedEffect(publicKey) {
+        inputPrivateKey = privateKey.ifEmpty { publicKey }
+    }
+    LaunchedEffect(relayConfigListState.value) {
         inputRelayList.clear()
-        inputRelayList.addAll(relayList)
+        inputRelayList.addAll(relayConfigListState.value)
     }
-    LaunchedEffect(fetchSize) {
-        inputFetchSize = fetchSize.toString()
+    LaunchedEffect(fetchSizeState.value) {
+        inputFetchSize = fetchSizeState.value.toString()
     }
     Column {
         LazyColumn(state = state, modifier = Modifier.weight(1f)) {
@@ -196,14 +198,9 @@ fun Setting(viewModel: TreeGroveViewModel, onNavigate: () -> Unit) {
             }
 
             if (valid) {
-                coroutineScope.launch(Dispatchers.IO) {
-                    viewModel.updatePreferences(
-                        UserPreferences(privateKey = privKey, publicKey = pubKey,
-                        relayList = list, fetchSize = inputFetchSize.toLong())
-                    )
-                }
-                Toast.makeText(context, context.getString(R.string.save_config), Toast.LENGTH_SHORT).show()
-                onNavigate()
+                onNavigate(UserPreferences(privateKey = privKey, publicKey = pubKey,
+                    relayList = list, fetchSize = inputFetchSize.toLong())
+                )
             }
         }, content = {
             Text(stringResource(R.string.save))

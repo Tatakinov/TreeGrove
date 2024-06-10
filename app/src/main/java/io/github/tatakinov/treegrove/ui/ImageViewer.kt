@@ -13,10 +13,11 @@ import androidx.compose.ui.res.stringResource
 import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.R
 import io.github.tatakinov.treegrove.TreeGroveViewModel
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun ImageViewer(viewModel: TreeGroveViewModel, url: String) {
-    val data by viewModel.fetchImage(url).collectAsState()
+fun ImageViewer(onDownload: (String) -> StateFlow<LoadingData<ByteArray>>, url: String) {
+    val data by onDownload(url).collectAsState()
     when (val d = data) {
         is LoadingData.Valid -> {
             val bitmap = BitmapFactory.decodeByteArray(d.data, 0, d.data.size)

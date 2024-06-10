@@ -11,10 +11,13 @@ import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun ChannelMenuItem(viewModel: TreeGroveViewModel, channel: Event, onAddTab: () -> Unit) {
-    val metaDataEvent by viewModel.subscribeReplaceableEvent(
+fun ChannelMenuItem(channel: Event,
+                    onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+                    onAddTab: () -> Unit) {
+    val metaDataEvent by onSubscribeReplaceableEvent(
         Filter(
             kinds = listOf(
                 Kind.ChannelMetadata.num

@@ -14,10 +14,9 @@ import io.github.tatakinov.treegrove.nostr.Filter
 
 
 @Composable
-fun LoadMoreEventsButton(viewModel: TreeGroveViewModel, filter: Filter) {
-    val coroutineScope = rememberCoroutineScope()
+fun LoadMoreEventsButton(fetch: (Long) -> Unit) {
     TextButton(onClick = {
-        viewModel.fetchStreamPastPost(filter, -1)
+        fetch(0)
     }) {
         Text(stringResource(id = R.string.load_more), textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }

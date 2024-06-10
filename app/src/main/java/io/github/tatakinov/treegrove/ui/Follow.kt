@@ -1,6 +1,5 @@
 package io.github.tatakinov.treegrove.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,37 +13,32 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.tatakinov.treegrove.LoadingData
-import io.github.tatakinov.treegrove.Misc
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.TreeGroveViewModel
+import io.github.tatakinov.treegrove.StreamUpdater
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.NIP19
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) -> Unit) {
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val privateKey by viewModel.privateKeyFlow.collectAsState()
-    val publicKey by viewModel.publicKeyFlow.collectAsState()
-    val priv = NIP19.parse(privateKey)
-    val pub = NIP19.parse(publicKey)
-    val meta by viewModel.subscribeReplaceableEvent(
+fun Follow(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, pubkey: String,
+           onSubscribeStreamReplaceableEvent: (Filter) -> StreamUpdater<LoadingData<ReplaceableEvent>>,
+           onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+           onPost: (Int, String, List<List<String>>) -> Unit,
+           onAddScreen: (Screen) -> Unit) {
+    val meta by onSubscribeReplaceableEvent(
         Filter(
             kinds = listOf(Kind.Metadata.num),
             authors = listOf(pubkey)
@@ -70,8 +64,8 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
         )
         if (priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
             val contactsFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(pub.id))
-            val contactsEventFlow = remember { viewModel.subscribeStreamReplaceableEvent(contactsFilter) }
-            val contactsEventList by contactsEventFlow.collectAsState()
+            val contactsEventUpdater = remember { onSubscribeStreamReplaceableEvent(contactsFilter) }
+            val contactsEventList by contactsEventUpdater.flow.collectAsState()
             val e = contactsEventList
             val c = if (e is LoadingData.Valid) {
                 e.data
@@ -105,11 +99,11 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                                 TextButton(onClick = {
                                     expandUnfollowDialog = false
                                     val list = c.list.filter { it.key != pubkey }
-                                    Misc.postContacts(viewModel, list, priv, pub, onSuccess = {}, onFailure = { url, reason ->
-                                        coroutineScope.launch {
-                                            Toast.makeText(context, context.getString(R.string.error_failed_to_post, reason), Toast.LENGTH_SHORT).show()
-                                        }
-                                    })
+                                    val tags = mutableListOf<List<String>>()
+                                    for (tag in list) {
+                                        tags.add(listOf("p", tag.key, tag.relay, tag.petname))
+                                    }
+                                    onPost(Kind.Contacts.num, "", tags)
                                 }) {
                                     Text(stringResource(id = R.string.ok))
                                 }
@@ -146,19 +140,11 @@ fun Follow(viewModel: TreeGroveViewModel, pubkey: String, onAddScreen: (Screen) 
                                             addAll(c.list)
                                             add(ReplaceableEvent.Contacts.Data(key = pubkey))
                                         }
-                                    Misc.postContacts(viewModel, list, priv, pub, onSuccess = {},
-                                        onFailure = { url, reason ->
-                                            coroutineScope.launch {
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(
-                                                        R.string.error_failed_to_post,
-                                                        reason
-                                                    ),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        })
+                                    val tags = mutableListOf<List<String>>()
+                                    for (tag in list) {
+                                        tags.add(listOf("p", tag.key, tag.relay, tag.petname))
+                                    }
+                                    onPost(Kind.Contacts.num, "", tags)
                                 }) {
                                     Text(stringResource(id = R.string.ok))
                                 }

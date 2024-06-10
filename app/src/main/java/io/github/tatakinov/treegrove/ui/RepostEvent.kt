@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -12,21 +13,26 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
+import io.github.tatakinov.treegrove.nostr.NIP19
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONException
 import org.json.JSONObject
 
 @Composable
-fun RepostEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?,
-           onNavigateImage: ((String) -> Unit)?, isFocused: Boolean) {
+fun RepostEvent(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, event: Event,
+                onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+                onSubscribeOneShotEvent: (Filter) -> StateFlow<List<Event>>,
+                onRepost: ((Event) -> Unit)?, onPost: ((Int, String, List<List<String>>) -> Unit)?,
+                onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?,
+                onNavigateImage: ((String) -> Unit)?, isFocused: Boolean) {
     val eTag = event.tags.firstOrNull { it.size >= 2 && it[0] == "e" }
     val kTag = event.tags.firstOrNull { it.size >= 2 && it[0] == "e" }
     val metaFilter = Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(event.pubkey))
-    val metaData by viewModel.subscribeReplaceableEvent(metaFilter).collectAsState()
+    val metaData by onSubscribeReplaceableEvent(metaFilter).collectAsState()
     val m = metaData
     val name = if (m is LoadingData.Valid && m.data is ReplaceableEvent.MetaData) {
         m.data.name
@@ -44,12 +50,15 @@ fun RepostEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event
                 listOf()
             }
             val filter = Filter(ids = listOf(eTag[1]), kinds = kinds)
-            val el by viewModel.subscribeOneShotEvent(filter).collectAsState()
+            val el by onSubscribeOneShotEvent(filter).collectAsState()
             if (el.isNotEmpty()) {
                 val e = el.first()
                 TextEvent(
-                    viewModel = viewModel,
+                    priv = priv, pub = pub,
                     event = e,
+                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                    onRepost = onRepost, onPost = onPost,
                     onNavigate = onNavigate,
                     onAddScreen = onAddScreen,
                     onNavigateImage = onNavigateImage,
@@ -65,8 +74,11 @@ fun RepostEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event
                 }
                 if (e != null) {
                     TextEvent(
-                        viewModel = viewModel,
+                        priv = priv, pub = pub,
                         event = e,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                        onRepost = onRepost, onPost = onPost,
                         onNavigate = onNavigate,
                         onAddScreen = onAddScreen,
                         onNavigateImage = onNavigateImage,
@@ -87,8 +99,11 @@ fun RepostEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event
             }
             if (e != null) {
                 TextEvent(
-                    viewModel = viewModel,
+                    priv = priv, pub = pub,
                     event = e,
+                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                    onRepost = onRepost, onPost = onPost,
                     onNavigate = onNavigate,
                     onAddScreen = onAddScreen,
                     onNavigateImage = onNavigateImage,

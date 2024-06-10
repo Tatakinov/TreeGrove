@@ -55,15 +55,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.acinq.secp256k1.Hex
 import io.github.tatakinov.treegrove.LoadingData
-import io.github.tatakinov.treegrove.Misc
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.TreeGroveViewModel
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.NIP05
 import io.github.tatakinov.treegrove.nostr.NIP19
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -71,7 +70,11 @@ import java.util.Locale
 
 
 @Composable
-fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?,
+fun TextEvent(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, event: Event,
+              onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+              onSubscribeOneShotEvent: (Filter) -> StateFlow<List<Event>>,
+              onRepost: ((Event) -> Unit)?, onPost: ((Int, String, List<List<String>>) -> Unit)?,
+              onNavigate: ((Event) -> Unit)?, onAddScreen: ((Screen) -> Unit)?,
               onNavigateImage: ((String) -> Unit)?, isFocused: Boolean) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -97,7 +100,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
         if (npubMatch != null) {
             val pub = NIP19.parse(npubMatch.value.substring(6))
             if (pub is NIP19.Data.Pub && !userMetaDataMap.containsKey(pub.id)) {
-                userMetaDataMap[pub.id] = viewModel.subscribeReplaceableEvent(
+                userMetaDataMap[pub.id] = onSubscribeReplaceableEvent(
                     Filter(
                         kinds = listOf(Kind.Metadata.num),
                         authors = listOf(pub.id)
@@ -113,7 +116,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
             val ev = NIP19.parse(noteMatch.value.substring(6))
             if (ev is NIP19.Data.Note) {
                 val f = Filter(ids = listOf(ev.id))
-                val eventList by viewModel.subscribeOneShotEvent(f).collectAsState()
+                val eventList by onSubscribeOneShotEvent(f).collectAsState()
                 if (eventList.isNotEmpty()) {
                     val e = eventList.first()
                     when (e.kind) {
@@ -135,7 +138,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                             if (ids.isNotEmpty()) {
                                 val channelFilter =
                                     Filter(ids = ids, kinds = listOf(Kind.ChannelCreation.num))
-                                val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
+                                val channelEvent by onSubscribeOneShotEvent(channelFilter)
                                     .collectAsState()
                                 if (channelEvent.isNotEmpty()) {
                                     pubkeyMap[ev.id] = e.pubkey
@@ -169,7 +172,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                     listOf()
                 }
                 val f = Filter(ids = ids, kinds = kinds, authors = authors)
-                val eventList by viewModel.subscribeOneShotEvent(f).collectAsState()
+                val eventList by onSubscribeOneShotEvent(f).collectAsState()
                 if (eventList.isNotEmpty()) {
                     val e = eventList.first()
                     when (e.kind) {
@@ -191,7 +194,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                             if (ids.isNotEmpty()) {
                                 val channelFilter =
                                     Filter(ids = ids, kinds = listOf(Kind.ChannelCreation.num))
-                                val channelEvent by viewModel.subscribeOneShotEvent(channelFilter)
+                                val channelEvent by onSubscribeOneShotEvent(channelFilter)
                                     .collectAsState()
                                 if (channelEvent.isNotEmpty()) {
                                     pubkeyMap[ev.id] = e.pubkey
@@ -371,7 +374,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                             kinds = listOf(Kind.Metadata.num),
                             authors = listOf(event.pubkey)
                         )
-                        val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
+                        val metaData by onSubscribeReplaceableEvent(filter).collectAsState()
                         val m = metaData
                         /*
                 Rtlのままだと
@@ -424,7 +427,7 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                 var text = ""
                 for (tag in event.tags) {
                     if (tag.size >= 2 && tag[0] == "p") {
-                        val metaData by viewModel.subscribeReplaceableEvent(
+                        val metaData by onSubscribeReplaceableEvent(
                             Filter(
                                 kinds = listOf(Kind.Metadata.num),
                                 authors = listOf(tag[1])
@@ -509,10 +512,6 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
             }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            val privateKey by viewModel.privateKeyFlow.collectAsState()
-            val publicKey by viewModel.publicKeyFlow.collectAsState()
-            val priv = NIP19.parse(privateKey)
-            val pub = NIP19.parse(publicKey)
             if (onNavigate != null) {
                 DropdownMenuItem(onClick = {
                     expanded = false
@@ -556,25 +555,8 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                             TextButton(onClick = {
                                 expanded = false
                                 expandedRepostDialog = false
-                                coroutineScope.launch {
-                                    Misc.repost(
-                                        viewModel = viewModel,
-                                        event = event,
-                                        priv = priv,
-                                        pub = pub,
-                                        onSuccess = {},
-                                        onFailure = { url, reason ->
-                                            coroutineScope.launch {
-                                                Toast.makeText(
-                                                    context,
-                                                    context.getString(
-                                                        R.string.error_failed_to_post,
-                                                        reason
-                                                    ),
-                                                    Toast.LENGTH_SHORT
-                                                ).show()
-                                            }
-                                        })
+                                if (onRepost != null) {
+                                    onRepost(event)
                                 }
                             }) {
                                 Text(stringResource(id = R.string.ok))
@@ -609,18 +591,9 @@ fun TextEvent(viewModel: TreeGroveViewModel, event: Event, onNavigate: ((Event) 
                                 val kind = Kind.EventDeletion.num
                                 val content = ""
                                 val tags = listOf(listOf("e", event.id))
-                                Misc.post(viewModel, kind, content, tags, priv, pub, onSuccess = {}, onFailure = { url, reason ->
-                                    coroutineScope.launch {
-                                        Toast.makeText(
-                                            context,
-                                            context.getString(
-                                                R.string.error_failed_to_post,
-                                                reason
-                                            ),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
-                                })
+                                if (onPost != null) {
+                                    onPost(kind, content, tags)
+                                }
                             }) {
                                 Text(stringResource(id = R.string.ok))
                             }

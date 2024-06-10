@@ -3,7 +3,6 @@ package io.github.tatakinov.treegrove.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,16 +36,14 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
-import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -54,44 +51,52 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.TreeGroveViewModel
+import io.github.tatakinov.treegrove.StreamUpdater
+import io.github.tatakinov.treegrove.connection.RelayInfo
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.NIP19
+import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
-fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigatePost: (Screen, Event?) -> Unit, onNavigateProfile: () -> Unit, onNavigateImage: (String) -> Unit) {
-    val context = LocalContext.current
+fun Home(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, tabList: SnapshotStateList<Screen>,
+         relayInfoList: State<List<RelayInfo>>, transmittedSize: State<Int>,
+         onConnectRelay: () -> Unit,
+         onSubscribeStreamEvent: (Filter) -> StreamUpdater<List<Event>>,
+         onSubscribeOneShotEvent: (Filter) -> StateFlow<List<Event>>,
+         onSubscribeStreamReplaceableEvent: (Filter) -> StreamUpdater<LoadingData<ReplaceableEvent>>,
+         onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+         onRepost: (Event) -> Unit, onPost: (Int, String, List<List<String>>) -> Unit,
+         onNavigateSetting: () -> Unit, onNavigatePost: (Screen, Event?) -> Unit, onNavigateProfile: () -> Unit, onNavigateImage: (String) -> Unit) {
     val coroutineScope = rememberCoroutineScope()
-    val publicKey by viewModel.publicKeyFlow.collectAsState()
-    val relayConfigList by viewModel.relayConfigListFlow.collectAsState()
-    val tabList = remember { viewModel.tabList }
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { tabList.size })
     val channelFilter = Filter(kinds = listOf(Kind.ChannelCreation.num))
-    val channelList by viewModel.subscribeStreamEvent(channelFilter).collectAsState()
+    val channelUpdater = remember { onSubscribeStreamEvent(channelFilter) }
+    val channelList by channelUpdater.flow.collectAsState()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     ModalNavigationDrawer(drawerState = drawerState, drawerContent = {
-        val relayInfoList by viewModel.relayInfoListFlow.collectAsState()
         ModalDrawerSheet(modifier = Modifier.padding(end = 100.dp)) {
             val listState = rememberLazyListState()
             var expandRelayList by remember { mutableStateOf(false) }
             var expandPinnedChannelList by remember { mutableStateOf(false) }
             var expandChannelList by remember { mutableStateOf(false) }
-            val pub = NIP19.parse(publicKey)
             if (pub is NIP19.Data.Pub) {
                 val pinnedChannelFilter = Filter(kinds = listOf(Kind.ChannelList.num), authors = listOf(pub.id))
-                val pinnedChannelList by viewModel.subscribeStreamEvent(pinnedChannelFilter).collectAsState()
+                val pinnedChannelUpdater = remember { onSubscribeStreamEvent(pinnedChannelFilter) }
+                val pinnedChannelList by pinnedChannelUpdater.flow.collectAsState()
                 LazyColumn(state = listState) {
                     item {
                         Row {
@@ -121,9 +126,9 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                         HorizontalDivider()
                     }
                     item {
-                        val transmittedDataSize by viewModel.transmittedSizeFlow.collectAsState()
+                        val transmittedDataSize by transmittedSize
                         var dataSize = transmittedDataSize
-                        for (relayInfo in relayInfoList) {
+                        for (relayInfo in relayInfoList.value) {
                             dataSize += relayInfo.transmittedSize
                         }
                         lateinit var unit: String
@@ -179,7 +184,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                         item {
                             HorizontalDivider()
                         }
-                        items(items = relayInfoList, key = { it.url }) { info ->
+                        items(items = relayInfoList.value, key = { it.url }) { info ->
                             NavigationDrawerItem(
                                 label = {
                                     Row {
@@ -193,7 +198,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                 },
                                 selected = false,
                                 onClick = {
-                                    viewModel.connectRelay()
+                                    onConnectRelay()
                                 })
                         }
                     }
@@ -268,7 +273,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                     }
                     if (expandPinnedChannelList) {
                         items(items = pinnedChannelList, key = { it.toJSONObject().toString() }) { channel ->
-                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                            ChannelMenuItem(channel = channel, onSubscribeReplaceableEvent = onSubscribeReplaceableEvent, onAddTab = {
                                 if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
                                     tabList.add(Screen.Channel(channel.id, channel.pubkey))
                                 }
@@ -290,7 +295,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             })
                         }
                         item {
-                            LoadMoreEventsButton(viewModel = viewModel, filter = pinnedChannelFilter)
+                            LoadMoreEventsButton(fetch = pinnedChannelUpdater.fetch)
                         }
                     }
                     item {
@@ -309,7 +314,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             HorizontalDivider()
                         }
                         items(items = channelList, key = { it.toJSONObject().toString() }) { channel ->
-                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                            ChannelMenuItem(channel = channel, onSubscribeReplaceableEvent = onSubscribeReplaceableEvent, onAddTab = {
                                 if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
                                     tabList.add(Screen.Channel(channel.id, channel.pubkey))
                                 }
@@ -331,13 +336,13 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             })
                         }
                         item {
-                            LoadMoreEventsButton(viewModel = viewModel, filter = channelFilter)
+                            LoadMoreEventsButton(fetch = channelUpdater.fetch)
                         }
                     }
                 }
                 DisposableEffect(pub.id) {
                     onDispose {
-                        viewModel.unsubscribeStreamEvent(pinnedChannelFilter)
+                        pinnedChannelUpdater.unsubscribe()
                     }
                 }
             }
@@ -361,9 +366,9 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                         HorizontalDivider()
                     }
                     item {
-                        val transmittedDataSize by viewModel.transmittedSizeFlow.collectAsState()
+                        val transmittedDataSize by transmittedSize
                         var dataSize = transmittedDataSize
-                        for (relayInfo in relayInfoList) {
+                        for (relayInfo in relayInfoList.value) {
                             dataSize += relayInfo.transmittedSize
                         }
                         lateinit var unit: String
@@ -419,7 +424,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                         item {
                             HorizontalDivider()
                         }
-                        items(items = relayInfoList, key = { it.url }) { info ->
+                        items(items = relayInfoList.value, key = { it.url }) { info ->
                             NavigationDrawerItem(
                                 label = {
                                     Row {
@@ -433,7 +438,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                                 },
                                 selected = false,
                                 onClick = {
-                                    viewModel.connectRelay()
+                                    onConnectRelay()
                                 })
                         }
                     }
@@ -453,7 +458,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             HorizontalDivider()
                         }
                         items(items = channelList, key = { it.toJSONObject().toString() }) { channel ->
-                            ChannelMenuItem(viewModel = viewModel, channel = channel, onAddTab = {
+                            ChannelMenuItem(channel = channel, onSubscribeReplaceableEvent = onSubscribeReplaceableEvent, onAddTab = {
                                 if (tabList.isEmpty() || tabList.none { it is Screen.Channel && it.id == channel.id }) {
                                     tabList.add(Screen.Channel(channel.id, channel.pubkey))
                                 }
@@ -475,7 +480,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             })
                         }
                         item {
-                            LoadMoreEventsButton(viewModel = viewModel, filter = channelFilter)
+                            LoadMoreEventsButton(fetch = channelUpdater.fetch)
                         }
                     }
                 }
@@ -538,28 +543,49 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                         }
                         when (val screen = tabList[index]) {
                             is Screen.OwnTimeline -> {
-                                OwnTimeline(viewModel, screen.id, onNavigate = {
+                                OwnTimeline(priv = priv, pub = pub, screen.id,
+                                    onSubscribeStreamEvent = onSubscribeStreamEvent,
+                                    onSubscribeStreamReplaceableEvent = onSubscribeStreamReplaceableEvent,
+                                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                                    onRepost = onRepost, onPost = onPost,
+                                    onNavigate = {
                                     onNavigatePost(screen, it)
                                 }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
                             }
 
                             is Screen.Timeline -> {
-                                Timeline(viewModel, screen.id, onNavigate = {
-                                    onNavigatePost(screen, it)
-                                }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                                Timeline(priv = priv, pub = pub, screen.id,
+                                    onSubscribeStreamEvent = onSubscribeStreamEvent,
+                                    onSubscribeStreamReplaceableEvent = onSubscribeStreamReplaceableEvent,
+                                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                                    onRepost = onRepost, onPost = onPost,
+                                    onNavigate = {
+                                        onNavigatePost(screen, it)
+                                    }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
                             }
 
                             is Screen.Channel -> {
-                                Channel(viewModel, screen.id, screen.pubkey, onNavigate = {
-                                    onNavigatePost(screen, it)
-                                }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
+                                Channel(priv = priv, pub = pub, id = screen.id, pubkey = screen.pubkey,
+                                    onSubscribeStreamEvent = onSubscribeStreamEvent,
+                                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                                    onRepost = onRepost, onPost = onPost,
+                                    onNavigate = {
+                                        onNavigatePost(screen, it)
+                                    }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
                             }
 
                             is Screen.EventDetail -> {
                                 EventDetail(
-                                    viewModel = viewModel,
+                                    priv = priv, pub = pub,
                                     id = screen.id,
                                     pubkey = screen.pubkey,
+                                    onSubscribeStreamEvent = onSubscribeStreamEvent,
+                                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                                    onRepost = onRepost, onPost = onPost,
                                     onNavigate = {
                                         onNavigatePost(screen, it)
                                     },
@@ -570,10 +596,15 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
 
                             is Screen.ChannelEventDetail -> {
                                 ChannelEventDetail(
-                                    viewModel = viewModel,
+                                    priv = priv,
+                                    pub = pub,
                                     id = screen.id,
                                     pubkey = screen.pubkey,
                                     channelID = screen.channelID,
+                                    onSubscribeStreamEvent = onSubscribeStreamEvent,
+                                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                                    onRepost = onRepost, onPost = onPost,
                                     onNavigate = {
                                         onNavigatePost(screen, it)
                                     },
@@ -583,7 +614,12 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
                             }
 
                             is Screen.Notification -> {
-                                Notification(viewModel = viewModel, onNavigate = {
+                                Notification(priv = priv, pub = pub,
+                                    onSubscribeStreamEvent = onSubscribeStreamEvent,
+                                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                                    onRepost = onRepost, onPost = onPost,
+                                    onNavigate = {
                                     onNavigatePost(screen, it)
                                 }, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage)
                             }
@@ -599,11 +635,7 @@ fun Home(viewModel: TreeGroveViewModel, onNavigateSetting: () -> Unit, onNavigat
             }
         }
     }
-    LaunchedEffect(relayConfigList) {
-        viewModel.setRelayConfigList(relayConfigList)
-    }
-    LaunchedEffect(publicKey) {
-        val pub = NIP19.parse(publicKey)
+    LaunchedEffect(pub) {
         if (pub is NIP19.Data.Pub) {
             for (i in tabList.indices) {
                 if (tabList[i] is Screen.OwnTimeline) {

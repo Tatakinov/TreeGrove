@@ -14,34 +14,46 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import io.github.tatakinov.treegrove.LoadingData
-import io.github.tatakinov.treegrove.TreeGroveViewModel
+import io.github.tatakinov.treegrove.StreamUpdater
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
+import io.github.tatakinov.treegrove.nostr.NIP19
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
+fun Channel(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, id: String, pubkey: String,
+            onSubscribeStreamEvent: (Filter) -> StreamUpdater<List<Event>>,
+            onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+            onSubscribeOneShotEvent: (Filter) -> StateFlow<List<Event>>,
+            onRepost: (Event) -> Unit, onPost: (Int, String, List<List<String>>) -> Unit,
+            onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
     val listState = rememberLazyListState()
-    val metaDataFilter = Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(pubKey), tags = mapOf("e" to listOf(id)))
-    val metaData by viewModel.subscribeReplaceableEvent(metaDataFilter).collectAsState()
+    val metaDataFilter = Filter(kinds = listOf(Kind.ChannelMetadata.num), authors = listOf(pubkey), tags = mapOf("e" to listOf(id)))
+    val metaData by onSubscribeReplaceableEvent(metaDataFilter).collectAsState()
     val eventFilter = Filter(kinds = listOf(Kind.ChannelMessage.num), tags = mapOf("e" to listOf(id)))
-    val eventListFlow = remember { viewModel.subscribeStreamEvent(eventFilter) }
-    val eventList by eventListFlow.collectAsState()
+    val eventListUpdater = remember { onSubscribeStreamEvent(eventFilter) }
+    val eventList by eventListUpdater.flow.collectAsState()
     Column {
         val m = metaData
         if (m is LoadingData.Valid && m.data is ReplaceableEvent.ChannelMetaData) {
-            ChannelTitle(viewModel = viewModel, id = id, name = m.data.name, about = m.data.about)
+            ChannelTitle(priv = priv, pub = pub, id = id, name = m.data.name, about = m.data.about,
+                onSubscribeReplaceableEvent = onSubscribeReplaceableEvent, onPost = onPost)
         } else {
-            ChannelTitle(viewModel = viewModel, id = id, name = id, about = null)
+            ChannelTitle(priv = priv, pub = pub, id = id, name = id, about = null,
+                onSubscribeReplaceableEvent = onSubscribeReplaceableEvent, onPost = onPost)
         }
         LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
             itemsIndexed(items = eventList, key = { _, event ->
                 event.toJSONObject().toString()
             }) { index, event ->
                 EventContainer(
-                    viewModel = viewModel,
+                    priv = priv, pub = pub,
                     event = event,
+                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                    onRepost = onRepost, onPost = onPost,
                     onNavigate = onNavigate,
                     onAddScreen = onAddScreen,
                     onNavigateImage = onNavigateImage,
@@ -49,21 +61,21 @@ fun Channel(viewModel: TreeGroveViewModel, id: String, pubKey: String, onNavigat
                     suppressDetail = true
                 )
                 LaunchedEffect(Unit) {
-                    viewModel.fetchStreamPastPost(eventFilter, index)
+                    eventListUpdater.fetch(event.createdAt)
                 }
             }
             item {
                 HorizontalDivider()
-                LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
+                LoadMoreEventsButton(fetch = eventListUpdater.fetch)
             }
         }
     }
     DisposableEffect(id) {
         if (eventList.isEmpty()) {
-            viewModel.fetchStreamPastPost(eventFilter, -1)
+            eventListUpdater.fetch(0)
         }
         onDispose {
-            viewModel.unsubscribeStreamEvent(eventFilter)
+            eventListUpdater.unsubscribe()
         }
     }
 }

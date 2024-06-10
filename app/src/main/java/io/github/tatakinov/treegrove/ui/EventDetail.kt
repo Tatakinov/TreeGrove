@@ -9,23 +9,33 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.TreeGroveViewModel
+import io.github.tatakinov.treegrove.StreamUpdater
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
+import io.github.tatakinov.treegrove.nostr.NIP19
+import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNavigate: (Event) -> Unit,
+fun EventDetail(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, id: String, pubkey: String,
+                onSubscribeStreamEvent: (Filter) -> StreamUpdater<List<Event>>,
+                onSubscribeOneShotEvent: (Filter) -> StateFlow<List<Event>>,
+                onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+                onRepost: (Event) -> Unit, onPost: (Int, String, List<List<String>>) -> Unit,
+                onNavigate: (Event) -> Unit,
                 onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
     val filter = Filter(ids = listOf(id), authors = listOf(pubkey))
-    val eventList by viewModel.subscribeOneShotEvent(filter).collectAsState()
+    val eventList by onSubscribeOneShotEvent(filter).collectAsState()
     val list = eventList
 
     if (list.isNotEmpty()) {
@@ -38,21 +48,30 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
             kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num),
             tags = mapOf("e" to listOf(event.id))
         )
-        val childEventFlow = remember { viewModel.subscribeStreamEvent(childFilter) }
-        val childEventList by childEventFlow.collectAsState()
+        val childEventUpdater = remember { onSubscribeStreamEvent(childFilter) }
+        val childEventList by childEventUpdater.flow.collectAsState()
         if (parentIDList.isNotEmpty()) {
             val parentFilter =
                 Filter(ids = parentIDList, kinds = listOf(Kind.Text.num, Kind.ChannelMessage.num))
-            val parentEventList by viewModel.subscribeOneShotEvent(parentFilter).collectAsState()
+            val parentEventList by onSubscribeOneShotEvent(parentFilter).collectAsState()
             LazyColumn(state = listState) {
                 items(items = parentEventList.sortedBy { it.createdAt },
                     key = { it.toJSONObject().toString() }) {
-                    EventContainer(viewModel, it, onNavigate, onAddScreen = onAddScreen, onNavigateImage, false)
+                    EventContainer(
+                        priv = priv, pub = pub,
+                        event = it,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                        onRepost = onRepost, onPost = onPost,
+                        onNavigate, onAddScreen = onAddScreen, onNavigateImage, false)
                 }
                 item {
                     EventContainer(
-                        viewModel,
-                        event,
+                        priv = priv, pub = pub,
+                        event = event,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                        onRepost = onRepost, onPost = onPost,
                         onNavigate,
                         onAddScreen,
                         onNavigateImage,
@@ -63,7 +82,13 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
                 items(
                     items = el.sortedBy { it.createdAt },
                     key = { it.toJSONObject().toString() }) {
-                    EventContainer(viewModel, it, onNavigate, onAddScreen, onNavigateImage, false)
+                    EventContainer(
+                        priv = priv, pub = pub,
+                        event = it,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                        onRepost = onRepost, onPost = onPost,
+                        onNavigate, onAddScreen, onNavigateImage, false)
                 }
             }
         }
@@ -71,8 +96,11 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
             LazyColumn(state = listState) {
                 item {
                     EventContainer(
-                        viewModel,
-                        event,
+                        priv = priv, pub = pub,
+                        event = event,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                        onRepost = onRepost, onPost = onPost,
                         onNavigate,
                         onAddScreen,
                         onNavigateImage,
@@ -82,19 +110,25 @@ fun EventDetail(viewModel: TreeGroveViewModel, id: String, pubkey: String, onNav
                 itemsIndexed(
                     items = childEventList.sortedBy { it.createdAt },
                     key = { _, event -> event.toJSONObject().toString() }) { index, event ->
-                    EventContainer(viewModel, event, onNavigate, onAddScreen, onNavigateImage, false)
+                    EventContainer(
+                        priv = priv, pub = pub,
+                        event = event,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                        onRepost = onRepost, onPost = onPost,
+                        onNavigate, onAddScreen, onNavigateImage, false)
                     LaunchedEffect(Unit) {
-                        viewModel.fetchStreamPastPost(childFilter, index)
+                        childEventUpdater.fetch(event.createdAt)
                     }
                 }
             }
         }
         DisposableEffect(event.id) {
             if (childEventList.isEmpty()) {
-                viewModel.fetchStreamPastPost(childFilter, -1)
+                childEventUpdater.fetch(0)
             }
             onDispose {
-                viewModel.unsubscribeStreamEvent(childFilter)
+                childEventUpdater.unsubscribe()
             }
         }
     }

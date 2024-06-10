@@ -15,6 +15,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,18 +26,26 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import io.github.tatakinov.treegrove.LoadingData
 import io.github.tatakinov.treegrove.R
-import io.github.tatakinov.treegrove.TreeGroveViewModel
+import io.github.tatakinov.treegrove.StreamUpdater
 import io.github.tatakinov.treegrove.nostr.Event
 import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
+import io.github.tatakinov.treegrove.nostr.NIP19
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
-fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
+fun OwnTimeline(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, id: String,
+                onSubscribeStreamEvent: (Filter) -> StreamUpdater<List<Event>>,
+                onSubscribeOneShotEvent: (Filter) -> StateFlow<List<Event>>,
+                onSubscribeStreamReplaceableEvent: (Filter) -> StreamUpdater<LoadingData<ReplaceableEvent>>,
+                onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+                onRepost: (Event) -> Unit, onPost: (Int, String, List<List<String>>) -> Unit,
+                onNavigate: (Event?) -> Unit, onAddScreen: (Screen) -> Unit, onNavigateImage: (String) -> Unit) {
     var expandFolloweeList by remember { mutableStateOf(false) }
     val followeeFilter = Filter(kinds = listOf(Kind.Contacts.num), authors = listOf(id))
-    val followeeEventListFlow = remember { viewModel.subscribeStreamReplaceableEvent(followeeFilter) }
-    val followeeEvent by followeeEventListFlow.collectAsState()
+    val followeeEventListUpdater = remember { onSubscribeStreamReplaceableEvent(followeeFilter) }
+    val followeeEvent by followeeEventListUpdater.flow.collectAsState()
     val fe = followeeEvent
     val followeeList = if (fe is LoadingData.Valid && fe.data is ReplaceableEvent.Contacts) {
         fe.data.list
@@ -46,12 +55,12 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
     }
     var expandFollowerList by remember { mutableStateOf(false) }
     val followerFilter = Filter(kinds = listOf(Kind.Contacts.num), tags = mapOf("p" to listOf(id)))
-    val followerListFlow = remember { viewModel.subscribeStreamEvent(followerFilter) }
-    val followerListEvent by followerListFlow.collectAsState()
+    val followerListUpdater = remember { onSubscribeStreamEvent(followerFilter) }
+    val followerListEvent by followerListUpdater.flow.collectAsState()
     if (followeeList.isNotEmpty()) {
         val eventFilter = Filter(kinds = listOf(Kind.Text.num, Kind.Repost.num, Kind.GenericRepost.num, Kind.ChannelMessage.num), authors = followeeList.map { it.key })
-        val eventListFlow = remember { viewModel.subscribeStreamEvent(eventFilter) }
-        val eventList by eventListFlow.collectAsState()
+        val eventListUpdater = remember { onSubscribeStreamEvent(eventFilter) }
+        val eventList by eventListUpdater.flow.collectAsState()
         val listState = rememberLazyListState()
         LazyColumn(state = listState, modifier = Modifier.fillMaxHeight()) {
             item {
@@ -62,7 +71,11 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
             if (expandFolloweeList) {
                 items(items = followeeList, key = { "followee@${it.key}" }) {
                     HorizontalDivider()
-                    Follow(viewModel, it.key, onAddScreen = onAddScreen)
+                    Follow(priv = priv, pub = pub, it.key,
+                        onSubscribeStreamReplaceableEvent = onSubscribeStreamReplaceableEvent,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onPost = onPost,
+                        onAddScreen = onAddScreen)
                 }
             }
             item {
@@ -76,37 +89,45 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
             if (expandFollowerList) {
                 items(items = followerListEvent, key = { "follower@${it.pubkey}" }) {
                     HorizontalDivider()
-                    Follow(viewModel = viewModel, it.pubkey, onAddScreen = onAddScreen)
+                    Follow(priv = priv, pub = pub, it.pubkey,
+                        onSubscribeStreamReplaceableEvent = onSubscribeStreamReplaceableEvent,
+                        onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                        onPost = onPost,
+                        onAddScreen = onAddScreen)
                 }
                 item {
                     HorizontalDivider()
                 }
                 item {
-                    LoadMoreEventsButton(viewModel = viewModel, filter = followerFilter)
+                    LoadMoreEventsButton(fetch = followeeEventListUpdater.fetch)
                 }
             }
             itemsIndexed(items = eventList, key = { _, event ->
                 event.toJSONObject().toString()
             }) { index, event ->
                 HorizontalDivider()
-                EventContainer(viewModel, event = event, onNavigate = onNavigate, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage, isFocused = false)
+                EventContainer(priv = priv, pub = pub, event = event,
+                    onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                    onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                    onRepost = onRepost, onPost = onPost,
+                    onNavigate = onNavigate, onAddScreen = onAddScreen, onNavigateImage = onNavigateImage, isFocused = false)
                 LaunchedEffect(Unit) {
-                    viewModel.fetchStreamPastPost(eventFilter, index)
+                    eventListUpdater.fetch(event.createdAt)
                 }
             }
             item {
                 HorizontalDivider()
             }
             item {
-                LoadMoreEventsButton(viewModel = viewModel, filter = eventFilter)
+                LoadMoreEventsButton(fetch = eventListUpdater.fetch)
             }
         }
         DisposableEffect(id) {
             if (eventList.isEmpty()) {
-                viewModel.fetchStreamPastPost(eventFilter, -1)
+                eventListUpdater.fetch(0)
             }
             onDispose {
-                viewModel.unsubscribeStreamEvent(eventFilter)
+                eventListUpdater.unsubscribe()
             }
         }
     }
@@ -117,7 +138,7 @@ fun OwnTimeline(viewModel: TreeGroveViewModel, id: String, onNavigate: (Event?) 
     }
     DisposableEffect(id) {
         onDispose {
-            viewModel.unsubscribeStreamReplaceableEvent(followerFilter)
+            followerListUpdater.unsubscribe()
         }
     }
 }

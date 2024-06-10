@@ -36,15 +36,15 @@ import io.github.tatakinov.treegrove.nostr.Filter
 import io.github.tatakinov.treegrove.nostr.Kind
 import io.github.tatakinov.treegrove.nostr.NIP19
 import io.github.tatakinov.treegrove.nostr.ReplaceableEvent
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Post(privateKey: State<String>, publicKey: State<String>, screen: Screen, event: Event?, onNavigate: (Event) -> Unit) {
-    val coroutineScope = rememberCoroutineScope()
-    val context = LocalContext.current
-    val privateKey by viewModel.privateKeyFlow.collectAsState()
-    val publicKey by viewModel.publicKeyFlow.collectAsState()
+fun Post(priv: NIP19.Data.Sec?, pub: NIP19.Data.Pub?, screen: Screen, event: Event?,
+         onSubscribeReplaceableEvent: (Filter) -> StateFlow<LoadingData<ReplaceableEvent>>,
+         onSubscribeOneShotEvent: (Filter) -> StateFlow<List<Event>>,
+         onNavigate: (Int, String, List<List<String>>) -> Unit) {
     var text by remember { mutableStateOf("") }
     var isContentWarning by remember { mutableStateOf(false) }
     var contentWarning by remember { mutableStateOf("") }
@@ -62,10 +62,14 @@ fun Post(privateKey: State<String>, publicKey: State<String>, screen: Screen, ev
             is Screen.Notification -> { Filter(kinds = listOf(Kind.Metadata.num), authors = listOf(screen.id))}
         }
     }
-    val metaData by viewModel.subscribeReplaceableEvent(filter).collectAsState()
+    val metaData by onSubscribeReplaceableEvent(filter).collectAsState()
     Column {
         if (event != null) {
-            EventContainer(viewModel, event, onNavigate = null, onAddScreen = null, onNavigateImage = null, isFocused = false)
+            EventContainer(priv = priv, pub = pub, event,
+                onSubscribeReplaceableEvent = onSubscribeReplaceableEvent,
+                onSubscribeOneShotEvent = onSubscribeOneShotEvent,
+                onRepost = null, onPost = null,
+                onNavigate = null, onAddScreen = null, onNavigateImage = null, isFocused = false)
             HorizontalDivider()
         }
         TextField(value = text, onValueChange = {
@@ -155,9 +159,7 @@ fun Post(privateKey: State<String>, publicKey: State<String>, screen: Screen, ev
             }
         }, confirmButton = {
             TextButton(onClick = {
-                val priv = NIP19.parse(privateKey)
-                val pub = NIP19.parse(publicKey)
-                if (text.isNotEmpty() && priv is NIP19.Data.Sec && pub is NIP19.Data.Pub) {
+                if (text.isNotEmpty()) {
                     val kind = event?.kind
                         ?: when (screen) {
                             is Screen.OwnTimeline -> {
@@ -232,12 +234,7 @@ fun Post(privateKey: State<String>, publicKey: State<String>, screen: Screen, ev
                     if (isContentWarning) {
                         tags.add(listOf("content-warning", contentWarning))
                     }
-                    Misc.post(viewModel, kind, text, tags, priv, pub, onSuccess = {}, onFailure = { url, reason ->
-                        coroutineScope.launch {
-                            Toast.makeText(context, context.getString(R.string.error_failed_to_post, reason), Toast.LENGTH_SHORT).show()
-                        }
-                    })
-                    onNavigate()
+                    onNavigate(kind, text, tags)
                 }
             }) {
                 Text(stringResource(id = R.string.ok))
